@@ -4,9 +4,6 @@ description: "Generate videos using Wan and HappyHorse models. Supports text-to-
 compatibility: "Requires Python 3.9+ and curl. Cursor: auto-loaded. Claude Code: read this skill's SKILL.md before first use."
 ---
 
-> **Agent setup**: If your agent doesn't auto-load skills (e.g. Claude Code),
-> see [agent-compatibility.md](references/agent-compatibility.md) once per session.
-
 # Qwen Video Generation
 
 Generate videos using Wan and HappyHorse models. All tasks are **asynchronous** — submit, then poll until
@@ -32,7 +29,6 @@ Use this skill's internal files to execute and learn. Load reference files on de
 | `references/prompt-guide.md` | Per-mode prompt formulas, sound description, multi-shot structure |
 | `references/examples.md` | Full script examples per mode |
 | `references/sources.md` | Official documentation URLs |
-| `references/agent-compatibility.md` | Agent self-check: register skills in project config for agents that don't auto-load |
 
 ## Security
 
@@ -42,12 +38,33 @@ Use this skill's internal files to execute and learn. Load reference files on de
 
 ## Key Compatibility
 
-> [!CAUTION]
-> **Token Plan keys (`sk-sp-...`) are NOT supported by this skill — using them is strictly forbidden.**
+Both PAYG (`sk-ws-...`; legacy `sk-...`) and Token Plan (`sk-sp-...`) keys are supported. Detect
+the API key type without exposing the Key:
 
-Scripts require a **standard QianWen API key** (`sk-...`, pay-as-you-go). The script detects
-`sk-sp-` keys at startup and **hard-fails with `exit 1`** before any HTTP request is sent. See
-`qianwen-ops-auth/references/tokenplan.md` for details.
+```bash
+python3 -c "
+import sys; sys.path.insert(0, 'scripts')
+from qianwen_lib import detect_api_key_type
+print(detect_api_key_type('scripts/qianwen_lib.py'))
+"
+```
+
+| Output | Meaning |
+|--------|---------|
+| `token-plan` | Token Plan key — use only models from the Token Plan list below. |
+| `payg` | Pay-as-you-go key — full model catalog available. |
+| `not-set` | No key configured. |
+
+For Token Plan, use an exact model from qianwen-model-selector, or consult
+`qianwen-ops-auth/references/tokenplan.md`. If unavailable, use:
+- Personal: https://platform.qianwenai.com/docs/token-plan/personal/token-plan-personal-overview.md
+- Team: https://platform.qianwenai.com/docs/token-plan/team/token-plan-team-overview.md
+
+Token Plan does not support local file upload; for i2v/r2v/kf2v modes, provide reference images/videos
+as accessible URLs (`https://` or `oss://`) rather than local paths.
+
+Token Plan supports only specific models — use exactly a model from the references above; do not
+guess or probe model availability. For PAYG, continue below.
 
 ## Mode Selection Guide
 
@@ -65,7 +82,7 @@ Scripts require a **standard QianWen API key** (`sk-...`, pay-as-you-go). The sc
 
 1. **User specified a model** → use directly.
 2. **Consult the qianwen-model-selector skill** when model choice depends on capability, scenario, or pricing.
-3. **No signal, clear task** → defaults: t2v → `wan2.6-t2v`, i2v → `wan2.6-i2v-flash`, kf2v → `wan2.2-kf2v-flash`, r2v → `wan2.6-r2v-flash`, vace → `wanx2.1-vace-plus`, videoedit → `wan2.7-videoedit`. For wan2.7 features, explicitly set `--model wan2.7-t2v` / `--model wan2.7-i2v` / `--model wan2.7-videoedit`. For HappyHorse 1.1 series (audio output, 3–15s), set `--model happyhorse-1.1-{t2v,i2v,r2v}`. For HappyHorse 1.0 series, set `--model happyhorse-1.0-{t2v,i2v,r2v,video-edit}`.
+3. **No signal, clear task** → defaults: t2v → `happyhorse-1.1-t2v`, i2v → `happyhorse-1.1-i2v`, kf2v → `wan2.2-kf2v-flash`, r2v → `happyhorse-1.1-r2v`, vace → `wanx2.1-vace-plus`, videoedit → `wan2.7-videoedit`. t2v/i2v/r2v defaults (HappyHorse 1.1) are TP+PAYG compatible with audio output, 3–15s; kf2v/vace/videoedit defaults are **PAYG-only**. For wan2.6 features (multi-shot, `size` param), explicitly set `--model wan2.6-t2v` / `--model wan2.6-i2v-flash`. For wan2.7 features, explicitly set `--model wan2.7-t2v` / `--model wan2.7-i2v` / `--model wan2.7-videoedit`. For HappyHorse 1.0 series, set `--model happyhorse-1.0-{t2v,i2v,r2v,video-edit}`.
 
 ## Models
 
@@ -75,7 +92,7 @@ Scripts require a **standard QianWen API key** (`sk-...`, pay-as-you-go). The sc
 |-------|----------|
 | `wan2.7-t2v` | Ratio control, auto-dubbing, 5000 char prompt, 720P/1080P. Use `resolution` + `ratio` params. |
 | `wan2.7-t2v-2026-06-12` | Snapshot of wan2.7-t2v. Same capabilities. |
-| `wan2.6-t2v` **default** | Audio, multi-shot, 2–15s, 720P/1080P. Use `size` param. |
+| `wan2.6-t2v` | Audio, multi-shot, 2–15s, 720P/1080P. Use `size` param. |
 | `wan2.5-t2v-preview` | Audio, 5s/10s, 480P/720P/1080P |
 | `wan2.2-t2v-plus` | Silent, 5s, 480P/1080P |
 
@@ -84,7 +101,7 @@ Scripts require a **standard QianWen API key** (`sk-...`, pay-as-you-go). The sc
 | Model | Features |
 |-------|----------|
 | `wan2.7-i2v` | Unified protocol: first frame, first+last frame, video continuation, audio sync. Uses `media[]` array. |
-| `wan2.6-i2v-flash` **default** | Audio/silent, multi-shot, 2–15s, 720P/1080P. Uses `img_url`. |
+| `wan2.6-i2v-flash` | Audio/silent, multi-shot, 2–15s, 720P/1080P. Uses `img_url`. |
 | `wan2.6-i2v` | Audio, multi-shot, 2–15s, 720P/1080P |
 | `wan2.5-i2v-preview` | Audio, 5s/10s, 480P/720P/1080P |
 
@@ -93,10 +110,24 @@ Scripts require a **standard QianWen API key** (`sk-...`, pay-as-you-go). The sc
 | Model                                       | Features                                                            |
 |---------------------------------------------|---------------------------------------------------------------------|
 | `wan2.2-kf2v-flash` **(kf2v default)**      | Silent, 5s, 480P/720P/1080P                                         |
+| `wan2.7-r2v`                                | **Multi-reference (image/video/audio)** role-play. `input.media=[{type,url}]` up to 5 mixed refs (`reference_image`/`reference_video`/`reference_audio`). `resolution` 720P/1080P + `duration` ≤10s, no `ratio`. **PAYG-only.** |
 | `wan2.7-r2v-2026-06-12`                     | Snapshot of wan2.7-r2v. Subject reference + voice customization + storyboard. |
 | `wan2.6-r2v`                                | Audio, single/multi character, 2–10s, 720P/1080P                    |
-| `wan2.6-r2v-flash` **(r2v default)**        | Audio/silent, multi-character, 2–10s, 720P/1080P                    |
+| `wan2.6-r2v-flash`                          | Audio/silent, multi-character, 2–10s, 720P/1080P. PAYG-only.        |
 | `wanx2.1-vace-plus` **(vace)**               | Multi-image ref, repainting, local edit, ≤5s, 720P                  |
+
+### wan3.0-video / wan3.0-video-prime (All-in-One t2v + i2v)
+
+Unified all-in-one models supporting both text-to-video (t2v) and image-to-video (i2v)
+in a single model. Mode is auto-detected: **t2v** when only `prompt` is given, **i2v** when
+a reference image is supplied (`img_url` / `reference_image` / `media`). **PAYG-only.**
+
+| Model                 | Features                                                                     |
+|-----------------------|------------------------------------------------------------------------------|
+| `wan3.0-video`        | t2v + i2v, `resolution` 480P/720P/1080P + `ratio` (adaptive/16:9/9:16/1:1) + `duration` ≤30s. i2v uses `input.media=[{type:reference_image,url}]`. |
+| `wan3.0-video-prime`  | Higher-quality variant of wan3.0-video. Same payload/parameters.             |
+
+> **PAYG-only**: `wan2.7-r2v`, `wan3.0-video`, `wan3.0-video-prime`, `wan2.2-kf2v-flash`, `wanx2.1-vace-plus`, and `wan2.7-videoedit` are **not available on Token Plan**. Under Token Plan, local file upload is unsupported — supply all reference images/videos/audio as accessible URLs (`https://` or `oss://`), never local paths.
 
 ### videoedit (Video Editing)
 
@@ -114,9 +145,9 @@ For pricing details, see [wan2.7-videoedit](https://www.qianwenai.com/models/wan
 
 | Model                       | Mode      | Payload differences vs wan2.6                                         |
 |-----------------------------|-----------|-----------------------------------------------------------------------|
-| `happyhorse-1.1-t2v`        | t2v       | **Audio output**, 3–15s, 720P/1080P. Uses `resolution` + `ratio` (NOT `size`). Same structure as 1.0-t2v. |
-| `happyhorse-1.1-i2v`        | i2v       | **Audio output**, 3–15s, 720P/1080P. Uses `media=[{type:'first_frame',url}]` (exactly one). Same constraints as 1.0-i2v. |
-| `happyhorse-1.1-r2v`        | r2v       | **Audio output**, 3–15s, 720P/1080P. Uses `media=[{type:reference_image,url}]` + `resolution` + `ratio`. Up to 9 refs. |
+| `happyhorse-1.1-t2v` **default** | t2v       | **Audio output**, 3–15s, 720P/1080P. TP+PAYG compatible. Uses `resolution` + `ratio` (NOT `size`). Same structure as 1.0-t2v. |
+| `happyhorse-1.1-i2v` **default** | i2v       | **Audio output**, 3–15s, 720P/1080P. TP+PAYG compatible. Uses `media=[{type:'first_frame',url}]` (exactly one). Same constraints as 1.0-i2v. |
+| `happyhorse-1.1-r2v` **default** | r2v       | **Audio output**, 3–15s, 720P/1080P. TP+PAYG compatible. Uses `media=[{type:reference_image,url}]` + `resolution` + `ratio`. Up to 9 refs. |
 | `happyhorse-1.0-t2v`        | t2v       | Uses `resolution` + `ratio` (NOT `size`). |
 | `happyhorse-1.0-i2v`        | i2v       | Uses `media=[{type:'first_frame',url}]` (exactly one). NO `negative_prompt`/`prompt_extend`/`ratio`/`last_frame`/`first_clip`/`driving_audio`. Wan2.6-style `img_url` auto-converted. |
 | `happyhorse-1.0-r2v`        | r2v       | Uses `media=[{type:reference_image,url}]` + `resolution` + `ratio`. Up to 9 refs. |
@@ -139,12 +170,9 @@ Endpoint: `/services/aigc/video-generation/video-synthesis`.
 
 ### Prerequisites
 
-- **API Key**: Check that `DASHSCOPE_API_KEY` (or `QIANWEN_API_KEY`) is set using a **non-plaintext** check only (e.g. in shell:
-  `[ -n "$DASHSCOPE_API_KEY" ]`; report only "set" or "not set", never the key value). If not set: run the *
-  *qianwen-ops-auth** skill if available; otherwise guide the user to obtain a key from [QianWen Console](https://platform.qianwenai.com/home/api-keys) and set it via `.env` file (
-  `echo 'DASHSCOPE_API_KEY=sk-your-key-here' >> .env` in project root or current directory) or environment variable. The
-  script searches for `.env` in the current working directory and the project root. Skills may be installed
-  independently — do not assume qianwen-ops-auth is present.
+- **API Key**: Use the non-plaintext detector in **Key Compatibility**; do not replace it with a
+  variable-presence check. If no Key is found, use qianwen-ops-auth when available or guide the user
+  to configure `DASHSCOPE_API_KEY`/`QIANWEN_API_KEY` in `.env`. Skills may be installed independently.
 - Python 3.9+ (stdlib only, **no pip install needed**)
 - For media merging (concat, trim, audio overlay): see [merge-media.md](references/merge-media.md) for ffmpeg/moviepy recipes suited to the user's environment
 
@@ -178,7 +206,7 @@ python3 <this-skill-dir>/scripts/video.py \
 | `--file path.json` | Load request from file |
 | `--mode MODE` | Override auto-detected mode (t2v/i2v/kf2v/r2v/vace) |
 | `--model ID` | Override model |
-| `--output dir/` | Save video and response JSON |
+| `--output path` | Directory or file path. If path ends with a video extension (.mp4/.mov/.webm/.mkv/.m4v etc.), it is used as the output filename (parent dir auto-created). Otherwise treated as directory — video is auto-named from the OSS URL basename, preventing overwrites across runs; use distinct filenames across calls to avoid overwriting response data |
 | `--print-response` | Print response JSON to stdout |
 | `--submit-only` | Submit and exit (print task_id) |
 | `--task-id ID` | Operate on existing task |
@@ -251,7 +279,7 @@ the [official pricing page](https://platform.qianwenai.com/docs/developer-guides
 | wan2.6-i2v-flash | per-second billing | per-second billing |
 | wan2.6-r2v-flash | per-second billing | per-second billing |
 
-Quick example: wan2.6-t2v 5s 720P — check
+Quick example: happyhorse-1.1-t2v 5s 720P — check
 the [official pricing page](https://platform.qianwenai.com/docs/developer-guides/getting-started/pricing) for current per-second
 rates. Some models may offer a limited free quota — **do not assume any call is free**; use the **qianwen-usage** skill to check remaining free tier quota, or verify in the user's [QianWen console](https://platform.qianwenai.com/home/benefits).
 

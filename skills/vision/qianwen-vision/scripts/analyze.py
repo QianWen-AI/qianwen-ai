@@ -35,6 +35,7 @@ from vision_lib import (  # noqa: E402
     stream_sse,
     try_parse_json,
     build_content,
+    validate_token_plan_model,
 )
 
 DEFAULT_MODEL = "qwen3.7-plus"
@@ -263,12 +264,19 @@ examples:
     args = parser.parse_args()
 
     api_key = require_api_key()
-    req = load_request(args)
+
+    try:
+        req = load_request(args)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if args.model:
         req["model"] = args.model
     elif "model" not in req or not req.get("model"):
         req["model"] = DEFAULT_MODEL
+
+    validate_token_plan_model(api_key, req["model"])
 
     if args.json_mode:
         req["json_mode"] = True
@@ -276,8 +284,12 @@ examples:
         val = args.schema
         req["schema"] = json.loads(val) if val.startswith("{") else json.loads(Path(val).read_text(encoding="utf-8"))
 
-    result = analyze(req, api_key, force_stream=args.stream,
-                     upload_files=args.upload_files)
+    try:
+        result = analyze(req, api_key, force_stream=args.stream,
+                         upload_files=args.upload_files)
+    except (ValueError, RuntimeError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if args.output:
         save_result(result, args.output)

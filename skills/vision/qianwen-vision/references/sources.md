@@ -1,6 +1,6 @@
 # Qwen Vision API Sources
 
-> **Enriched guides**: See [api-guide.md](api-guide.md), [visual-reasoning.md](visual-reasoning.md), [ocr.md](ocr.md) for complete documentation with code examples (validity: 2026-03).
+> **Enriched guides**: See [api-guide.md](api-guide.md), [visual-reasoning.md](visual-reasoning.md), [ocr.md](ocr.md) for complete documentation with code examples.
 
 ## Official Documentation
 

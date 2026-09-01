@@ -83,5 +83,5 @@ This applies regardless of language or response format.
   user verifying in their console.
 - **If pricing data is unavailable or uncertain, say so explicitly and link to the official pricing page.
   Never fill the gap with a guess.**
-- **Default currency is USD.** Writing in Chinese does NOT imply CNY. Check the official pricing page for
+- **Default currency is CNY.** Check the official pricing page for
   the latest rates and currency.

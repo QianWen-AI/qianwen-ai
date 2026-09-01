@@ -1,6 +1,6 @@
 # Visual Reasoning Guide
 
-> **Content validity**: 2026-04 | **Source**: [Visual Reasoning](https://platform.qianwenai.com/docs/developer-guides/text-generation/thinking)
+> **Content validity**: 2026-08 | **Source**: [Visual Reasoning](https://platform.qianwenai.com/docs/developer-guides/text-generation/thinking)
 
 ---
 
@@ -29,7 +29,12 @@ Visual reasoning models output their thinking process before the final answer. S
 |-------|---------|-------|
 | `qwen3-vl-plus` | thinking **off** | Set `enable_thinking: true` to activate |
 | `qwen3-vl-flash` | thinking **off** | Set `enable_thinking: true` to activate |
-| `qwen3.6-plus` | thinking **on** | Latest flagship. Set `enable_thinking: false` to disable |
+| `qwen3.8-max` | thinking **on** | Set `enable_thinking: false` to disable |
+| `qwen3.8-flash` | thinking **on** | Set `enable_thinking: false` to disable |
+| `qwen3.7-plus` | thinking **on** | Set `enable_thinking: false` to disable |
+| `qwen3.7-flash` | thinking **on** | Set `enable_thinking: false` to disable |
+| `qwen3.6-plus` | thinking **on** | Strong all-rounder. Set `enable_thinking: false` to disable |
+| `qwen3.6-flash` | thinking **on** | Set `enable_thinking: false` to disable |
 | `qwen3.5-plus` | thinking **on** | Set `enable_thinking: false` to disable |
 | `qwen3.5-flash` | thinking **on** | Set `enable_thinking: false` to disable |
 
@@ -140,7 +145,7 @@ completion = client.chat.completions.create(
 )
 ```
 
-**Video duration limits**: 2s-2h (Qwen3.5) / 2s-10min (QVQ, Qwen3-VL, Qwen2.5-VL). `fps` range [0.1, 10], default 2.0. Use lower fps for long videos to save tokens.
+**Video duration limits**: 2s-2h (Qwen3.8/3.7/3.6/3.5 series) / 2s-1h (Qwen3-VL series) / 2s-10min (QVQ, Qwen2.5-VL). `fps` range [0.1, 10], default 2.0. Use lower fps for long videos to save tokens.
 
 **Script usage**:
 
@@ -160,7 +165,7 @@ python scripts/reason.py --request '{"prompt":"Describe the action",
 1. **QVQ models require streaming.** Non-streaming calls return an error. The skill script auto-enables streaming for QVQ.
 2. **Thinking tokens are billed as output tokens.** This increases cost. Use `thinking_budget` to limit reasoning depth.
 3. **System prompt**: In general (non-agent) scenarios, do not set a System Message for optimal performance. Pass instructions via User Message. For multi-turn agents, use the system message.
-4. **Qwen3.6-plus/Qwen3.5-plus thinking is on by default.** Disable with `enable_thinking: false` for simple tasks where speed matters.
+4. **Qwen3.6-plus/Qwen3.6-flash/Qwen3.5-plus thinking is on by default.** Disable with `enable_thinking: false` for simple tasks where speed matters.
 5. **Structured output only in non-thinking mode.** JSON Schema and structured output are only supported when thinking is disabled.
 6. **analyze.py also supports thinking.** Set `enable_thinking: true` in the request — the script auto-enables streaming. Use reason.py only for QVQ or dedicated reasoning workflows.
 7. **Video reasoning supported.** Both `reason.py` and `analyze.py` accept `video` (URL) and `video_frames` (frame list) input with optional `fps` parameter. Video audio is not processed — models analyze frames only.

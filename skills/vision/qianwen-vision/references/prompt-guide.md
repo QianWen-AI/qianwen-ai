@@ -22,7 +22,7 @@ Techniques for crafting effective visual query prompts. If the user provides a s
 | Simple "what is this?" | `false` | `qwen3-vl-flash` |
 | Detailed analysis | `true` (default) | `qwen3.7-plus` |
 | Math / logic from images | always on | `qvq-max` (streaming) |
-| OCR extraction | N/A | `qwen-vl-ocr` |
+| OCR extraction | N/A | `qwen3.5-ocr` |
 | Precise localization / 3D | optional | `qwen3-vl-plus` |
 
 ## Prompt Enhancement Patterns

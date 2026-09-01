@@ -213,13 +213,16 @@ class DashScopeProvider(AIProvider):
 
     _CONSOLE_URL = "https://platform.qianwenai.com/home/api-keys"
 
-    _COMPAT_BASE: dict[str, str] = {
+    _COMPATIBLE_BASE: dict[str, str] = {
         "cn-beijing": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     }
 
     _NATIVE_BASE: dict[str, str] = {
         "cn-beijing": "https://dashscope.aliyuncs.com/api/v1",
     }
+
+    _TOKEN_PLAN_COMPATIBLE_BASE = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    _TOKEN_PLAN_NATIVE_BASE = "https://token-plan.cn-beijing.maas.aliyuncs.com/api/v1"
 
     # --- Authentication ---
 
@@ -235,19 +238,6 @@ class DashScopeProvider(AIProvider):
             *,
             domain: str = "",
     ) -> str:
-        if key.startswith("sk-sp-"):
-            suffix = (
-                f" {domain} models are not available on Token Plan."
-                if domain
-                else ""
-            )
-            print(
-                f"Warning: Token Plan key detected (sk-sp-...). "
-                f"This script requires a standard API key (sk-...).{suffix} "
-                "Docs: https://platform.qianwenai.com/docs/token-plan/overview",
-                file=sys.stderr,
-            )
-            sys.exit(1)
         return key
 
     # --- Endpoints ---
@@ -264,7 +254,9 @@ class DashScopeProvider(AIProvider):
             return url.rstrip("/")
         if url:
             return url.rstrip("/")
-        return self._COMPAT_BASE.get(region, self._COMPAT_BASE["cn-beijing"])
+        if is_token_plan_key():
+            return self._TOKEN_PLAN_COMPATIBLE_BASE
+        return self._COMPATIBLE_BASE.get(region, self._COMPATIBLE_BASE["cn-beijing"])
 
     def native_base_url(self) -> str:
         custom = os.getenv("QWEN_BASE_URL")
@@ -279,6 +271,8 @@ class DashScopeProvider(AIProvider):
         if custom:
             parsed = urllib.parse.urlparse(custom.rstrip("/"))
             return f"{parsed.scheme}://{parsed.netloc}/api/v1"
+        if is_token_plan_key():
+            return self._TOKEN_PLAN_NATIVE_BASE
         return self._NATIVE_BASE.get(region, self._NATIVE_BASE["cn-beijing"])
 
     # --- HTTP headers ---
@@ -291,6 +285,7 @@ class DashScopeProvider(AIProvider):
         hdrs: dict[str, str] = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
+            "User-Agent": "qianwenai-skill",
         }
         if payload and self.has_managed_url(payload):
             hdrs["X-DashScope-OssResourceResolve"] = "enable"
@@ -323,6 +318,15 @@ class DashScopeProvider(AIProvider):
         Otherwise, files go to DashScope temp storage (48 h TTL) and an
         ``oss://`` URL is returned.
         """
+        if is_token_plan_key(api_key):
+            print(
+                "Error: Token Plan does not support local file upload.\n"
+                "Provide the reference image/video as an accessible URL "
+                "(https:// or oss://) instead.\n"
+                "Read more: https://platform.qianwenai.com/docs/token-plan/overview",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         if os.getenv("QWEN_TMP_OSS_BUCKET"):
             return self._upload_to_user_oss(fp)
         policy = self._get_upload_policy(api_key, model)
@@ -545,7 +549,8 @@ def require_api_key(
 ) -> str:
     """Load and return the API key for the active provider, or exit with guidance.
 
-    Token Plan keys (``sk-sp-...``) are rejected with ``sys.exit(1)``.
+    Token Plan keys (``sk-sp-...``) are accepted. Endpoint helpers use
+    Token Plan-specific endpoints unless ``QWEN_BASE_URL`` overrides them.
 
     Parameters
     ----------
@@ -577,6 +582,82 @@ def require_api_key(
         sys.exit(1)
 
     return provider.validate_api_key(key, domain=domain)
+
+
+def is_token_plan_key(api_key: str | None = None) -> bool:
+    """Return whether an explicit or configured API key belongs to Token Plan."""
+    if api_key is None:
+        api_key = os.environ.get("QIANWEN_API_KEY", "").strip()
+        if not api_key:
+            api_key = os.environ.get("DASHSCOPE_API_KEY", "").strip()
+    return api_key.startswith("sk-sp-")
+
+
+def detect_api_key_type(script_file=None):
+    """Return 'token-plan', 'payg', or 'not-set'."""
+    load_env(script_file)
+    key = (os.environ.get("QIANWEN_API_KEY") or
+           os.environ.get("DASHSCOPE_API_KEY") or "").strip()
+    if not key:
+        return "not-set"
+    return "token-plan" if key.startswith("sk-sp-") else "payg"
+
+
+# ---------------------------------------------------------------------------
+# Token Plan model allowlists (frozenset for O(1) lookup)
+# ---------------------------------------------------------------------------
+
+_TOKEN_PLAN_MODELS_PERSONAL: frozenset[str] = frozenset({
+    # Text / Reasoning (some also support vision)
+    "qwen3.8-max", "qwen3.8-flash", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-flash",
+    "glm-5.2",
+    "deepseek-v4-pro", "deepseek-v4-pro-0813", "deepseek-v4-flash-0731",
+    # Image
+    "qwen-image-3.0-pro", "wan2.7-image", "wan2.7-image-pro",
+    # Video
+    "happyhorse-1.1-i2v", "happyhorse-1.1-t2v", "happyhorse-1.1-r2v",
+    # Audio
+    "qwen-audio-3.0-tts-plus", "qwen-audio-3.0-realtime-plus",  # realtime; platform-available, not implemented by any skill
+    "qwen-audio-3.0-asr-flash",  # ASR; whitelist-reserved, no script entry in this repo
+})
+
+_TOKEN_PLAN_MODELS_TEAM: frozenset[str] = _TOKEN_PLAN_MODELS_PERSONAL | frozenset({
+    # Extra text
+    "qwen3.6-plus", "deepseek-v4-flash", "deepseek-v3.2",
+    "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5",
+    "glm-5.1", "glm-5", "MiniMax-M2.5",
+    # Extra image
+    "qwen-image-2.0", "qwen-image-2.0-pro",
+})
+
+
+def validate_token_plan_model(
+    api_key: str,
+    model: str,
+    plan_type: str | None = None,
+) -> None:
+    """Block unsupported models when using a Token Plan key."""
+    if not is_token_plan_key(api_key):
+        return
+
+    if plan_type == "personal":
+        allowed = _TOKEN_PLAN_MODELS_PERSONAL
+    elif plan_type == "team":
+        allowed = _TOKEN_PLAN_MODELS_TEAM
+    else:
+        allowed = _TOKEN_PLAN_MODELS_TEAM  # superset
+
+    if model in allowed:
+        return
+
+    plan_label = f" ({plan_type})" if plan_type else ""
+    print(
+        f'Error: Model "{model}" is not available on Token Plan{plan_label}.\n'
+        f"To use this model, switch to a standard API key (sk-...).\n"
+        f"Read more: https://platform.qianwenai.com/docs/token-plan/overview",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def compat_base_url() -> str:
@@ -818,7 +899,7 @@ def resolve_file(
 def download_file(url: str, dest: Path, *, timeout: int = 120) -> Path:
     """Download a file from *url* to *dest*, creating parent dirs as needed."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    req = urllib.request.Request(url, headers={"User-Agent": "qianwen-ai/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "qianwenai-skill"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         dest.write_bytes(resp.read())
     return dest

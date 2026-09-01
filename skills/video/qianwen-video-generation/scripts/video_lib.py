@@ -26,10 +26,10 @@ MODE_VACE = "vace"
 MODE_VIDEO_EDIT = "videoedit"
 
 DEFAULT_MODELS: dict[str, str] = {
-    MODE_T2V: "wan2.6-t2v",
-    MODE_I2V: "wan2.6-i2v-flash",
+    MODE_T2V: "happyhorse-1.1-t2v",
+    MODE_I2V: "happyhorse-1.1-i2v",
     MODE_KF2V: "wan2.2-kf2v-flash",
-    MODE_R2V: "wan2.6-r2v-flash",
+    MODE_R2V: "happyhorse-1.1-r2v",
     MODE_VACE: "wanx2.1-vace-plus",
     MODE_VIDEO_EDIT: "wan2.7-videoedit",
 }
@@ -48,6 +48,18 @@ _HAPPYHORSE_I2V_MODELS = frozenset({"happyhorse-1.0-i2v", "happyhorse-1.1-i2v"})
 # happyhorse-r2v uses media[{type:reference_image, url}] + resolution+ratio
 # (different from wan2.6-r2v which uses reference_urls + size).
 _HAPPYHORSE_R2V_MODELS = frozenset({"happyhorse-1.0-r2v", "happyhorse-1.1-r2v"})
+
+# wan2.7-r2v uses input.media = [{type, url}, ...] with mixed reference types
+# (reference_image / reference_video / reference_audio, up to 5) + resolution
+# + duration + prompt_extend + watermark. NO `ratio` (auto-derived from refs).
+# Distinct from happyhorse-r2v (reference_image only) and wan2.6-r2v (reference_urls+size).
+_WAN27_R2V_MODELS = frozenset({"wan2.7-r2v"})
+
+# wan3.0-video / wan3.0-video-prime are all-in-one models supporting both t2v
+# (input.prompt only) and i2v (input.media=[{type:reference_image, url}]).
+# parameters: resolution (480P~1080P) + ratio + duration (<=30s).
+# Routed by model id inside build_t2v_payload / build_i2v_payload.
+_WAN30_VIDEO_MODELS = frozenset({"wan3.0-video", "wan3.0-video-prime"})
 
 # Video-edit models share a unified payload (media=[1 video]+[refs], no `function`).
 _VIDEO_EDIT_MODELS = frozenset({"happyhorse-1.0-video-edit", "wan2.7-videoedit"})
@@ -75,12 +87,20 @@ def detect_mode(request: dict[str, Any]) -> str:
     model = request.get("model", "")
     if model in _VIDEO_EDIT_MODELS:
         return MODE_VIDEO_EDIT
+    # wan3.0-video / wan3.0-video-prime are all-in-one: pick t2v vs i2v by whether
+    # a reference image is supplied (media / img_url / reference_image).
+    if model in _WAN30_VIDEO_MODELS:
+        if (request.get("media") or request.get("img_url")
+                or request.get("reference_image")
+                or request.get("reference_urls")):
+            return MODE_I2V
+        return MODE_T2V
     if request.get("function"):
         return MODE_VACE
     if request.get("reference_urls"):
         return MODE_R2V
-    # happyhorse-r2v may also be triggered by model id alone
-    if model in _HAPPYHORSE_R2V_MODELS:
+    # happyhorse-r2v / wan2.7-r2v may also be triggered by model id alone
+    if model in _HAPPYHORSE_R2V_MODELS or model in _WAN27_R2V_MODELS:
         return MODE_R2V
     # wan2.7-i2v uses media array or first_clip_url
     if request.get("media") or request.get("first_clip_url"):
@@ -99,7 +119,7 @@ RESOLVE_KEYS: dict[str, list[str]] = {
     MODE_T2V: ["audio_url", "video_url"],
     MODE_I2V: ["img_url", "reference_image", "audio_url",
                "first_frame_url", "last_frame_url", "driving_audio_url", "first_clip_url",
-               "media"],
+               "media", "reference_urls"],
     MODE_KF2V: ["first_frame_url", "last_frame_url"],
     MODE_R2V: ["reference_urls", "media"],
     MODE_VACE: ["video_url", "mask_image_url", "mask_video_url",
@@ -136,6 +156,10 @@ def resolve_request_urls(request: dict[str, Any], api_key: str, model: str,
 
 def build_t2v_payload(request: dict[str, Any], model: str) -> dict[str, Any]:
     """Build payload for text-to-video generation (wan2.6/wan2.7/happyhorse-t2v)."""
+    # wan3.0-video / wan3.0-video-prime use their own unified builder.
+    if model in _WAN30_VIDEO_MODELS:
+        return _build_wan30_video_payload(request, model)
+
     is_v27 = model in _WAN27_T2V_MODELS
 
     input_obj: dict[str, Any] = {"prompt": request.get("prompt", "")}
@@ -178,6 +202,10 @@ def build_i2v_payload(request: dict[str, Any], model: str) -> dict[str, Any]:
     # 1) happyhorse-i2v has its own strict spec; never fall through.
     if model in _HAPPYHORSE_I2V_MODELS:
         return _build_happyhorse_i2v_payload(request, model)
+
+    # 1b) wan3.0-video / wan3.0-video-prime use their own unified builder.
+    if model in _WAN30_VIDEO_MODELS:
+        return _build_wan30_video_payload(request, model)
 
     # 2) wan2.7-i2v uses media array
     is_v27 = model in _WAN27_I2V_MODELS
@@ -347,6 +375,9 @@ def build_kf2v_payload(request: dict[str, Any], model: str) -> dict[str, Any]:
 
 def build_r2v_payload(request: dict[str, Any], model: str) -> dict[str, Any]:
     """Build payload for reference-based role-play video generation."""
+    # wan2.7-r2v uses input.media = [{type, url}] mixed refs (image/video/audio).
+    if model in _WAN27_R2V_MODELS:
+        return _build_r2v_wan27_payload(request, model)
     # happyhorse-r2v uses a different payload structure (media array + resolution+ratio).
     if model in _HAPPYHORSE_R2V_MODELS:
         return _build_r2v_happyhorse_payload(request, model)
@@ -397,6 +428,101 @@ def _build_r2v_happyhorse_payload(request: dict[str, Any], model: str) -> dict[s
         "duration": request.get("duration", 5),
     }
     for key in ("ratio", "watermark", "seed", "prompt_extend", "audio_setting"):
+        if request.get(key) is not None:
+            params[key] = request[key]
+
+    return {"model": model, "input": input_obj, "parameters": params}
+
+
+_WAN27_R2V_MAX_MEDIA = 5
+
+
+def _build_r2v_wan27_payload(request: dict[str, Any], model: str) -> dict[str, Any]:
+    """Build payload for wan2.7-r2v multi-reference video generation.
+
+    Verified contract (tmp/test-new-models/wan2.7-r2v):
+      - input.media = [{type, url}, ...] where type in
+        {reference_image, reference_video, reference_audio}; up to 5 mixed refs.
+      - input.prompt: passthrough.
+      - parameters: resolution (720P/1080P) + duration (<=10s) + prompt_extend + watermark.
+      - NO `ratio` (auto-derived from references), NO `fps`.
+
+    Backward-compat: accept `reference_urls=[...]` (bare strings promoted to
+    reference_image) in addition to explicit media=[{type, url}].
+    """
+    media: list[dict[str, str]] = []
+    for url in (request.get("reference_urls") or []):
+        media.append({"type": "reference_image", "url": str(url)})
+    for item in (request.get("media") or []):
+        if isinstance(item, dict):
+            media.append(item)
+        else:
+            media.append({"type": "reference_image", "url": str(item)})
+
+    if not media:
+        raise ValueError(
+            f"{model} requires at least one reference. Provide via "
+            "reference_urls=[...] or media=[{type:reference_image|reference_video|"
+            "reference_audio, url}]."
+        )
+    if len(media) > _WAN27_R2V_MAX_MEDIA:
+        raise ValueError(
+            f"{model} accepts at most {_WAN27_R2V_MAX_MEDIA} reference media items "
+            f"(got {len(media)})."
+        )
+
+    input_obj: dict[str, Any] = {
+        "prompt": request.get("prompt", ""),
+        "media": media,
+    }
+
+    params: dict[str, Any] = {
+        "resolution": request.get("resolution", "720P"),
+        "duration": request.get("duration", 5),
+    }
+    for key in ("prompt_extend", "watermark", "seed"):
+        if request.get(key) is not None:
+            params[key] = request[key]
+
+    return {"model": model, "input": input_obj, "parameters": params}
+
+
+def _build_wan30_video_payload(request: dict[str, Any], model: str) -> dict[str, Any]:
+    """Build payload for wan3.0-video / wan3.0-video-prime (unified t2v + i2v).
+
+    Verified contract (tmp/test-new-models/wan3.0-video, wan3.0-video-prime):
+      - t2v: input has only `prompt` (no media).
+      - i2v: input.media = [{type:'reference_image', url}, ...] from
+        media / img_url / reference_image.
+      - parameters: resolution (480P~1080P) + ratio (adaptive/16:9/9:16/1:1)
+        + duration (<=30s).
+    """
+    input_obj: dict[str, Any] = {"prompt": request.get("prompt", "")}
+
+    media: list[dict[str, str]] = []
+    if request.get("media"):
+        for item in request["media"]:
+            if isinstance(item, dict):
+                media.append(item)
+            else:
+                media.append({"type": "reference_image", "url": str(item)})
+    else:
+        url = request.get("img_url") or request.get("reference_image")
+        if url:
+            media.append({"type": "reference_image", "url": str(url)})
+    # reference_urls → media compat layer (silent mapping, same as wan2.7-r2v)
+    for ref_url in (request.get("reference_urls") or []):
+        media.append({"type": "reference_image", "url": str(ref_url)})
+    if media:
+        input_obj["media"] = media
+    if request.get("negative_prompt"):
+        input_obj["negative_prompt"] = request["negative_prompt"]
+
+    params: dict[str, Any] = {
+        "resolution": request.get("resolution", "1080P"),
+        "duration": request.get("duration", 5),
+    }
+    for key in ("ratio", "prompt_extend", "watermark", "seed"):
         if request.get(key) is not None:
             params[key] = request[key]
 

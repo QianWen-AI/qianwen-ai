@@ -30,6 +30,7 @@ from vision_lib import (  # noqa: E402
     save_result,
     stream_sse,
     build_content,
+    validate_token_plan_model,
 )
 
 DEFAULT_MODEL = "qvq-max"
@@ -169,14 +170,25 @@ examples:
     args = parser.parse_args()
 
     api_key = require_api_key()
-    req = load_request(args)
+
+    try:
+        req = load_request(args)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if args.model:
         req["model"] = args.model
     elif "model" not in req or not req.get("model"):
         req["model"] = DEFAULT_MODEL
 
-    result = reason(req, api_key, upload_files=args.upload_files)
+    validate_token_plan_model(api_key, req["model"])
+
+    try:
+        result = reason(req, api_key, upload_files=args.upload_files)
+    except (ValueError, RuntimeError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if args.output:
         save_result(result, args.output)

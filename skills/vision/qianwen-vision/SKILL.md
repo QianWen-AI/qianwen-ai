@@ -4,9 +4,6 @@ description: "Understand images and videos with Qwen vision models. TRIGGER when
 compatibility: "Requires Python 3.9+ and curl. Cursor: auto-loaded. Claude Code: read this skill's SKILL.md before first use."
 ---
 
-> **Agent setup**: If your agent doesn't auto-load skills (e.g. Claude Code),
-> see [agent-compatibility.md](references/agent-compatibility.md) once per session.
-
 # Qwen Vision (Image & Video Understanding)
 
 Analyze images and videos using Qwen VL and QVQ models.
@@ -28,7 +25,6 @@ Use this skill's internal files to execute and learn. Load reference files on de
 | `references/prompt-guide.md` | Query prompt templates by task, thinking mode decision |
 | `references/ocr.md` | OCR parameters and examples |
 | `references/sources.md` | Official documentation URLs |
-| `references/agent-compatibility.md` | Agent self-check: register skills in project config for agents that don't auto-load |
 
 ## Security
 
@@ -38,18 +34,46 @@ Use this skill's internal files to execute and learn. Load reference files on de
 
 ## Key Compatibility
 
-> [!CAUTION]
-> **Token Plan keys (`sk-sp-...`) are NOT supported by this skill — using them is strictly forbidden.**
+Both PAYG (`sk-ws-...`; legacy `sk-...`) and Token Plan (`sk-sp-...`) keys are supported. Detect
+the API key type without exposing the Key:
 
-Scripts require a **standard QianWen API key** (`sk-...`, pay-as-you-go). The scripts detect
-`sk-sp-` keys at startup and **hard-fail with `exit 1`** before any HTTP request is sent. See
-`qianwen-ops-auth/references/tokenplan.md` for details.
+```bash
+python3 -c "
+import sys; sys.path.insert(0, 'scripts')
+from qianwen_lib import detect_api_key_type
+print(detect_api_key_type('scripts/qianwen_lib.py'))
+"
+```
+
+| Output | Meaning |
+|--------|---------|
+| `token-plan` | Token Plan key — use only models from the Token Plan list below. |
+| `payg` | Pay-as-you-go key — full model catalog available. |
+| `not-set` | No key configured. |
+
+For Token Plan, use an exact model from qianwen-model-selector, or consult
+`qianwen-ops-auth/references/tokenplan.md`. If unavailable, use:
+- Personal: https://platform.qianwenai.com/docs/token-plan/personal/token-plan-personal-overview.md
+- Team: https://platform.qianwenai.com/docs/token-plan/team/token-plan-team-overview.md
+
+Token Plan users: use a model with vision capability — `qwen3.8-max`, `qwen3.8-flash`,
+`qwen3.7-plus`, `qwen3.6-flash` (personal + team), or `qwen3.6-plus`, `kimi-k2.7-code`,
+`kimi-k2.6`, `kimi-k2.5` (team only). Other models in Token Plan do not support image/video
+understanding.
+
+Token Plan supports only specific models — use exactly a model from the references above; do not
+guess or probe model availability. For PAYG, continue below.
+
+> **Token Plan users**: The `ocr` default `qwen3.5-ocr` and `reason` default `qvq-max` are NOT on Token Plan.
+> - **OCR**: specify `--model qwen3.8-flash` (low-cost general OCR) or `qwen3.8-max` (best quality). Specialized ID-card/coordinate/formula extraction may be slightly less accurate than the dedicated OCR model.
+> - **Visual reasoning**: specify `--model qwen3.8-max` (visual reasoning + thinking) or `qwen3.8-flash` (lightweight).
 
 ## Model Selection
 
 | Model | Use Case |
 |-------|----------|
 | **qwen3.8-max** | Strongest flagship — 2.4T params, MoE. Top-tier multimodal (text+image+video). Thinking on by default. 1M context. Higher cost. |
+| **qwen3.8-flash** | Fast flagship multimodal — same-gen as qwen3.8-max, optimized for speed and cost-efficiency. Multimodal (text+image+video). Thinking on by default. 1M context. |
 | **qwen3.7-flash** | High-perf multimodal flash — surpasses qwen3.6-flash across all dimensions. Enhanced universal recognition, Search Agent & CI Agent. Vibe coding optimized. Thinking on by default. 1M context. Best cost-efficiency for vision tasks. |
 | **qwen3.7-plus** | **Preferred** — next-gen balanced model, surpasses qwen3.6-plus in multimodal understanding, Agent execution & coding, GUI perception. 1M context. Thinking on by default. |
 | **qwen3.6-plus** | Previous-gen balanced — multimodal (text+image+video). Thinking on by default. Strong coding & universal recognition. |
@@ -58,7 +82,8 @@ Scripts require a **standard QianWen API key** (`sk-...`, pay-as-you-go). The sc
 | **qwen3-vl-plus** | High-precision — object localization (2D/3D), document/webpage parsing. |
 | **qwen3-vl-flash** | Fast vision — lower latency, 33 languages. |
 | **qvq-max** | Visual reasoning — chain-of-thought for math, charts. **Streaming only.** |
-| **qwen-vl-ocr** | OCR — text extraction, table parsing, document scanning. |
+| **qwen3.5-ocr** | OCR — latest recommended OCR model. PDF parsing, multi-turn, enhanced ID/card recognition. |
+| **qwen-vl-ocr** | OCR — text extraction, table parsing, document scanning. Legacy; use `--model qwen-vl-ocr` to select explicitly. |
 | **qwen-vl-max** | Qwen2.5-VL — best-performing in 2.5 series. |
 | **qwen-vl-plus** | Qwen2.5-VL — faster, good balance of performance and cost, 11 languages. |
 
@@ -78,12 +103,9 @@ Scripts require a **standard QianWen API key** (`sk-...`, pay-as-you-go). The sc
 
 ### Prerequisites
 
-- **API Key**: Check that `DASHSCOPE_API_KEY` (or `QIANWEN_API_KEY`) is set using a **non-plaintext** check only (e.g. in shell:
-  `[ -n "$DASHSCOPE_API_KEY" ]`; report only "set" or "not set", never the key value). If not set: run the *
-  *qianwen-ops-auth** skill if available; otherwise guide the user to obtain a key from [QianWen Console](https://platform.qianwenai.com/home/api-keys) and set it via `.env` file (
-  `echo 'DASHSCOPE_API_KEY=sk-your-key-here' >> .env` in project root or current directory) or environment variable. The
-  script searches for `.env` in the current working directory and the project root. Skills may be installed
-  independently — do not assume qianwen-ops-auth is present.
+- **API Key**: Use the non-plaintext detector in **Key Compatibility**; do not replace it with a
+  variable-presence check. If no Key is found, use qianwen-ops-auth when available or guide the user
+  to configure `DASHSCOPE_API_KEY`/`QIANWEN_API_KEY` in `.env`. Skills may be installed independently.
 - Python 3.9+ (stdlib only, **no pip install needed**)
 
 ### Environment Check
@@ -108,7 +130,7 @@ If `python3` is not found, try `python --version` or `py -3 --version`. If Pytho
 |--------|---------|---------------|
 | `scripts/analyze.py` | Image understanding, multi-image, video, thinking mode, high-res | `qwen3.7-plus` |
 | `scripts/reason.py` | Visual reasoning with chain-of-thought, video reasoning (always streaming) | `qvq-max` |
-| `scripts/ocr.py` | OCR text extraction from documents, receipts, tables | `qwen-vl-ocr` |
+| `scripts/ocr.py` | OCR text extraction from documents, receipts, tables | `qwen3.5-ocr` |
 
 **Input type fields** (use exactly one in `--request` JSON):
 
@@ -186,6 +208,8 @@ The API accepts: **HTTP/HTTPS URL**, **Base64 data URI**, and **`oss://` URL**. 
 
 **Large file rule: If the local file is >= 7 MB, always add `--upload-files`.** Base64 encoding inflates size by ~33% and will exceed the 10 MB API limit. Small files (including short video clips < 7 MB) can use the default base64 path.
 
+> **Token Plan (`sk-sp-...`) exception**: The `--upload-files` temp-upload endpoint is unavailable for Token Plan keys and will be blocked with a friendly error. Token Plan users should use the default base64 path for local files; for files >= 7 MB, pass an accessible URL (`https://` or `oss://`) instead of `--upload-files`.
+
 | Method | When to use | How |
 |--------|-------------|-----|
 | **Online URL** | File already hosted | Pass URL directly — **preferred for large files** |
@@ -215,15 +239,15 @@ When the input file comes from another skill's output (e.g., image-gen, video-ge
 
 See [visual-reasoning.md](references/visual-reasoning.md) for details.
 
-## OCR (qwen-vl-ocr)
+## OCR (qwen3.5-ocr)
 
-Optimized for text extraction. Supports multi-language, skewed images, tables, formulas. See [ocr.md](references/ocr.md) for parameters and examples.
+Default OCR model is `qwen3.5-ocr` — the latest recommended OCR model with PDF parsing, multi-turn conversation, and enhanced ID/card recognition. The legacy `qwen-vl-ocr` remains available via `--model qwen-vl-ocr`. Supports multi-language, skewed images, tables, formulas. See [ocr.md](references/ocr.md) for parameters and examples.
 
 ## Input Limits
 
-**Images**: BMP/JPEG/PNG/TIFF/WEBP/HEIC. Min 10px sides, aspect ratio <= 200:1. Max 20 MB (URL, Qwen3.5) / 10 MB (others).
+**Images**: BMP/JPEG/PNG/TIFF/WEBP/HEIC. Min 10px sides, aspect ratio <= 200:1. Max 20 MB (URL; Qwen3.8/3.7/3.6/3.5 & Qwen3-VL series) / 10 MB (others).
 
-**Videos**: MP4/AVI/MKV/MOV/FLV/WMV. Duration 2s–2h (Qwen3.5) / 2s–10min (others). Max 2 GB (URL) / 10 MB (base64). fps range [0.1, 10], default 2.0.
+**Videos**: MP4/AVI/MKV/MOV/FLV/WMV. Duration 2s–2h (Qwen3.8/3.7/3.6/3.5 series) / 2s–1h (Qwen3-VL series) / 2s–10min (others). Max 2 GB (URL) / 10 MB (base64). fps range [0.1, 10], default 2.0.
 
 ## Error Handling
 

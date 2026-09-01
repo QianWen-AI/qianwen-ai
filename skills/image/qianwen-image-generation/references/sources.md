@@ -1,6 +1,6 @@
 # Qwen Image Generation API Sources
 
-> **Enriched API guide**: See [api-guide.md](api-guide.md) for complete documentation with code examples (validity: 2026-04).
+> **Enriched API guide**: See [api-guide.md](api-guide.md) for complete documentation with code examples.
 
 ## Official Documentation
 

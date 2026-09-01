@@ -16,8 +16,8 @@ Text-to-speech synthesis service that produces natural, human-like voices. Suppo
 |----------|------------------|-------|
 | General speech synthesis / announcements | `qwen3-tts-flash` | Fast, multi-language, billed per character. |
 | Audiobooks / game dubbing / radio dramas | `qwen3-tts-instruct-flash` | Control emotion, rate, and character via `instructions`. |
-| High-quality professional TTS | `qwen-audio-3.0-tts-plus` | Instruction control, voice cloning, multi-language. |
-| Low-latency real-time interaction | `qwen-audio-3.0-tts-flash` | Instruction control, voice cloning, optimized for speed. |
+| High-quality professional TTS | `qwen-audio-3.0-tts-plus` | **Default**. Instruction control, voice cloning, multi-language. TP + PAYG. |
+| Low-latency real-time interaction | `qwen-audio-3.0-tts-flash` | PAYG-only; instruction control, voice cloning, optimized for speed. Specify `--model` explicitly. |
 | High-performance multi-language TTS | `cosyvoice-v3.5-flash` | Instruction control, 11 languages. Custom voices only. |
 | Ultra-expressive multi-language TTS | `cosyvoice-v3.5-plus` | Instruction control, 11 languages. Custom voices only. |
 | Brand voice customization (from text description) | `qwen3-tts-vd-2026-01-26` | Design a new voice from a text description without audio samples. |
@@ -141,7 +141,7 @@ resp = dashscope.MultiModalConversation.call(
 | `optimize_instructions` | No | When true, the system semantically enhances `instructions` for better naturalness. Requires `instructions` to be set. Default: false. |
 | `stream` | No | `false` = returns audio URL. `true` = streams Base64-encoded audio chunks. |
 
-### Key Parameters (CosyVoice v3.5 / Qwen-Audio-TTS NRT — `HttpSpeechSynthesizer`)
+### Key Parameters (CosyVoice v3.5 / Qwen-Audio-TTS NRT — HTTP API)
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -177,7 +177,7 @@ A: Use flash for straightforward synthesis (announcements, navigation, reading a
 A: CosyVoice v3.5 adds free-style instruction control (`instruction` parameter), reduces first-packet latency, improves pronunciation accuracy and prosody, and expands language support to 11 languages (Chinese, English, German, French, Russian, Japanese, Korean, Portuguese, Thai, Indonesian, Vietnamese). The v3.5-plus variant offers ultra-high expressiveness, while v3.5-flash prioritizes performance.
 
 **Q: How do I use CosyVoice v3.5 or Qwen-Audio-TTS for non-real-time synthesis?**
-A: Use `HttpSpeechSynthesizer.call()` from `dashscope.audio.http_tts.http_speech_synthesizer`. Set `stream=False` for a URL result, or `stream=True` for chunked audio data. See the [cosyvoice-guide.md](cosyvoice-guide.md) for full details.
+A: Run `scripts/tts_cosyvoice.py`. For PAYG NRT models, the script calls the public HTTP API directly. Token Plan keys are **not** supported by `tts_cosyvoice.py` (it will reject them); Token Plan users should use `tts.py --model qwen-audio-3.0-tts-plus` instead. See the [cosyvoice-guide.md](cosyvoice-guide.md) for full details.
 
 **Q: How do I make synthesized speech sound more natural?**
 A: (1) Set `language_type` to match the text language. (2) Use the instruct model with `instructions` describing the desired style. (3) Enable `optimize_instructions=True` to let the system enhance the instructions.

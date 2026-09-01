@@ -28,6 +28,7 @@ from qianwen_lib import (  # noqa: E402
     native_base_url,
     require_api_key,
     run_update_signal,
+    validate_token_plan_model,
 )
 
 # ---------------------------------------------------------------------------
@@ -35,8 +36,17 @@ from qianwen_lib import (  # noqa: E402
 # ---------------------------------------------------------------------------
 
 TTS_GENERATION_PATH = "/services/aigc/multimodal-generation/generation"
-DEFAULT_MODEL = "qwen3-tts-flash"
+# NRT endpoint path (Qwen-Audio-TTS models: qwen-audio-3.0-tts-plus/flash)
+NRT_TTS_PATH = "/services/audio/tts/SpeechSynthesizer"
+DEFAULT_MODEL = "qwen-audio-3.0-tts-plus"
 DEFAULT_VOICE = "Cherry"
+
+# Default voice per Qwen-Audio-TTS model (voices are NOT interchangeable across models)
+NRT_DEFAULT_VOICES: dict[str, str] = {
+    "qwen-audio-3.0-tts-plus": "longanlingxin",
+    "qwen-audio-3.0-tts-flash": "longanhuan_v3.6",
+}
+NRT_FALLBACK_VOICE = "longanlingxin"
 
 
 # ---------------------------------------------------------------------------
@@ -52,6 +62,11 @@ def _guess_audio_ext(url: str, default: str = ".wav") -> str:
     return default
 
 
+def _is_qwen3_tts(model: str) -> bool:
+    """Qwen3-TTS models use the multimodal-generation endpoint."""
+    return model.startswith("qwen3-tts-")
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -64,18 +79,25 @@ def main() -> None:
         epilog="""\
 request JSON fields (--request / --file):
   text                (required) Text to synthesize into speech
-  voice               Voice ID — overridden by --voice flag (default: Cherry)
+  voice               Voice ID — overridden by --voice flag
   model               Model ID — overridden by --model flag
-  language_type       Force language: "zh" / "en" / "ja" / "ko" etc.
+  language_type       Force language (Qwen3-TTS models only):
+                      "Chinese" / "English" / "Japanese" / "Korean" /
+                      "French" / "German" / "Russian" / "Italian" /
+                      "Spanish" / "Portuguese"
+  language_hints      Force language (NRT models: qwen-audio-3.0-tts-*):
+                      ["zh"] / ["en"] / ["ja"] / ["ko"] etc. (ISO array)
   instructions        Style instructions for instruct models, e.g.
                       "Speak slowly with a warm, gentle tone"
   optimize_instructions  true/false — auto-optimize instruction text
 
 models:
-  qwen3-tts-flash                (default) Fast, multi-voice
+  qwen-audio-3.0-tts-plus        (default) High-quality NRT, voice longanlingxin
+  qwen-audio-3.0-tts-flash       Low-latency NRT, voice longanhuan_v3.6 (PAYG-only)
+  qwen3-tts-flash                Fast multimodal-generation, voice Cherry
   qwen3-tts-instruct-flash       Instruction-controlled style/emotion/pace
 
-  Note: For CosyVoice (v3.5/v3), Qwen-Audio-TTS, realtime streaming, etc.,
+  Note: For CosyVoice (v3.5/v3), realtime streaming, etc.,
         use tts_cosyvoice.py or see https://www.qianwenai.com/models.
 
 output:
@@ -114,8 +136,12 @@ examples:
                         help="Print audio URL and file path JSON to stdout")
     parser.add_argument("--model", type=str, default=None,
                         help=f"Model ID (default: {DEFAULT_MODEL}). See epilog for model list")
-    parser.add_argument("--voice", type=str, default=DEFAULT_VOICE,
-                        help="Voice ID (default: %(default)s)")
+    parser.add_argument("--voice", type=str, default=None,
+                        help=f"Voice ID (default: {DEFAULT_VOICE} for qwen3-tts-*)")
+    parser.add_argument("--format", default="mp3", choices=["mp3", "wav", "pcm"],
+                        help="Audio format (Qwen-Audio-TTS models only, default: mp3)")
+    parser.add_argument("--sample-rate", type=int, default=24000,
+                        help="Sample rate in Hz (Qwen-Audio-TTS models only, default: 24000)")
     args = parser.parse_args()
 
     try:
@@ -136,21 +162,39 @@ examples:
         request["model"] = DEFAULT_MODEL
     model = request["model"]
 
-    voice = request.get("voice") or args.voice
+    api_key = require_api_key(script_file=__file__, domain="TTS")
+    validate_token_plan_model(api_key, model)
 
-    input_obj: dict[str, Any] = {"text": text, "voice": voice}
-    if request.get("language_type"):
-        input_obj["language_type"] = request["language_type"]
+    if _is_qwen3_tts(model):
+        # Qwen3-TTS: multimodal-generation endpoint
+        voice = request.get("voice") or args.voice or DEFAULT_VOICE
+        input_obj: dict[str, Any] = {"text": text, "voice": voice}
+        if request.get("language_type"):
+            input_obj["language_type"] = request["language_type"]
+        if request.get("instructions") and "instruct" in model.lower():
+            input_obj["instructions"] = request["instructions"]
+            if request.get("optimize_instructions") is not None:
+                input_obj["optimize_instructions"] = request["optimize_instructions"]
+        url = f"{native_base_url()}{TTS_GENERATION_PATH}"
+    else:
+        # Qwen-Audio-TTS series: NRT endpoint
+        voice = request.get("voice") or args.voice or NRT_DEFAULT_VOICES.get(model, NRT_FALLBACK_VOICE)
+        input_obj = {
+            "text": text,
+            "voice": voice,
+            "format": args.format,
+            "sample_rate": args.sample_rate,
+        }
+        if request.get("instruction"):
+            input_obj["instruction"] = request["instruction"]
+        if request.get("language_hints"):
+            hints = request["language_hints"]
+            if isinstance(hints, str):
+                hints = [hints]
+            input_obj["language_hints"] = hints
+        url = f"{native_base_url()}{NRT_TTS_PATH}"
 
     payload: dict[str, Any] = {"model": model, "input": input_obj}
-
-    if request.get("instructions") and "instruct" in model.lower():
-        input_obj["instructions"] = request["instructions"]
-        if request.get("optimize_instructions") is not None:
-            input_obj["optimize_instructions"] = request["optimize_instructions"]
-
-    api_key = require_api_key(script_file=__file__, domain="TTS")
-    url = f"{native_base_url()}{TTS_GENERATION_PATH}"
 
     try:
         resp = http_request("POST", url, api_key, payload, timeout=60)

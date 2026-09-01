@@ -8,11 +8,11 @@
 
 ## Text Generation (per 1M tokens)
 
-**Commercial models**: qwen3.8-max, qwen3.7-max, qwen3.7-plus, qwen3.7-flash, qwen3.6-max-preview, qwen3.6-plus, qwen3.6-flash, qwen3-max, qwen3.5-plus, qwen3.5-flash, qwen-plus, qwen-flash, qwen-turbo, qwq-plus, qwen3-coder-next, qwen3-coder-plus, qwen3-coder-flash, qwen-plus-character, qwen-plus-character-ja, qwen-flash-character
+**Commercial models**: qwen3.8-max, qwen3.8-flash, qwen3.7-max, qwen3.7-plus, qwen3.7-flash, qwen3.6-max-preview, qwen3.6-plus, qwen3.6-flash, qwen3-max, qwen3.5-plus, qwen3.5-flash, qwen-plus, qwen-flash, qwen-turbo, qwq-plus, qwen3-coder-next, qwen3-coder-plus, qwen3-coder-flash, qwen-plus-character, qwen-flash-character
 
-**Open-source models**: qwen3.6-27b, qwen3.5-397b-a17b, qwen3.5-122b-a10b, qwen3.5-27b, qwen3.5-35b-a3b, qwen3-235b-a22b, qwen3-32b, qwen3-30b-a3b, qwen3-8b, qwen3-4b
+**Open-source models**: qwen3.8-27b, qwen3.8-2.4t-a95b, qwen3.6-35b-a3b, qwen3.6-27b, qwen3.5-397b-a17b, qwen3.5-122b-a10b, qwen3.5-27b, qwen3.5-35b-a3b, qwen3-235b-a22b, qwen3-32b, qwen3-30b-a3b, qwen3-8b
 
-**Third-party / Partner models**: deepseek-v4-flash, deepseek-v4-flash-0731, glm-5.2, glm-5.1, kimi-k3, kimi-k2.6, MiniMax-M2.5
+**Third-party / Partner models**: deepseek-v4-pro-0813, deepseek-v4-pro, deepseek-v4-flash, deepseek-v4-flash-0731, glm-5.2, glm-5.1, kimi-k3, kimi-k2.7-code, kimi-k2.6, MiniMax-M2.5
 
 > Third-party models are hosted on the QianWen platform but billed/maintained by their respective providers. Pricing tiers and free quotas may differ from first-party Qwen models. Always verify via `qianwen models info <id>` before estimating cost.
 
@@ -22,11 +22,7 @@
 - **Batch API**: 50% off for supported models
 - Some models may offer a limited free quota — **do not assume the user has remaining free quota**; use the **qianwen-usage** skill to check, or verify in the [QianWen console](https://platform.qianwenai.com/home/benefits)
 
-For per-token pricing, see each model's detail page:
-[qwen3.8-max](https://www.qianwenai.com/models/qwen3.8-max) ·
-[qwen3.7-max](https://www.qianwenai.com/models/qwen3.7-max) ·
-[qwen3.7-plus](https://www.qianwenai.com/models/qwen3.7-plus) ·
-[qwen3.7-flash](https://www.qianwenai.com/models/qwen3.7-flash)
+For per-token pricing, see each model's detail page, e.g. [qwen3.8-max](https://www.qianwenai.com/models/qwen3.8-max).
 
 ## Vision Understanding (per 1M tokens)
 
@@ -64,9 +60,7 @@ For per-token pricing, see each model's detail page:
 - Audio-enabled models may have different rates than silent variants
 - Video editing models (`wan2.7-videoedit`, `happyhorse-1.0-video-edit`) bill on the **output** video duration
 
-For per-second pricing, see each model's detail page:
-[happyhorse-1.1-t2v](https://www.qianwenai.com/models/happyhorse-1.1-t2v) ·
-[happyhorse-1.0-t2v](https://www.qianwenai.com/models/happyhorse-1.0-t2v)
+For per-second pricing, see each model's detail page, e.g. [wan2.7-t2v](https://www.qianwenai.com/models/wan2.7-t2v).
 
 ## Speech Synthesis / TTS (per 10K characters)
 
@@ -74,12 +68,7 @@ For per-second pricing, see each model's detail page:
 
 - Billing unit: **per 10,000 characters**
 
-For per-character pricing, see each model's detail page:
-[cosyvoice-v3.5-plus](https://www.qianwenai.com/models/cosyvoice-v3.5-plus) ·
-[cosyvoice-v3.5-flash](https://www.qianwenai.com/models/cosyvoice-v3.5-flash) ·
-[cosyvoice-v3-plus](https://www.qianwenai.com/models/cosyvoice-v3-plus) ·
-[cosyvoice-v3-flash](https://www.qianwenai.com/models/cosyvoice-v3-flash) ·
-[qwen3-tts-flash](https://www.qianwenai.com/models/qwen3-tts-flash)
+For per-character pricing, see each model's detail page, e.g. [qwen-audio-3.0-tts-plus](https://www.qianwenai.com/models/qwen-audio-3.0-tts-plus).
 
 ## Speech Recognition / ASR (per second of audio)
 

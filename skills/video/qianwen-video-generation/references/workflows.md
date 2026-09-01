@@ -6,7 +6,7 @@ When user requirements exceed a single mode's limits, **suggest combining modes 
 
 kf2v (first+last frame) and vace are capped at **5s**. If the user wants a longer video:
 
-1. **Preferred**: Use **wan2.6-t2v** (up to 15s) or **wan2.6-i2v** (up to 15s) which natively support longer durations. If the user has a first frame image, i2v is a direct replacement for kf2v with longer duration support.
+1. **Preferred**: Use **happyhorse-1.1-t2v** (default, 3–15s, TP+PAYG) or **happyhorse-1.1-i2v** (3–15s) which natively support longer durations with audio. Alternatively, **wan2.6-t2v** (up to 15s) or **wan2.6-i2v** (up to 15s) also support longer durations. If the user has a first frame image, i2v is a direct replacement for kf2v with longer duration support.
 2. **If kf2v is essential** (user needs both first AND last frame control): Generate the 5s kf2v video first, then extend it using **vace `video_extension`** — trim the kf2v output to a ≤3s tail clip and use it as `first_clip_url` to generate the next 5s segment. Repeat for additional segments, then concatenate all segments (see [merge-media.md](merge-media.md)).
 3. **For any mode**: To produce videos >15s, chain multiple generations — use the last frame or tail clip of each segment as input for the next. Concatenate final segments (see [merge-media.md](merge-media.md)). Inform the user this is a multi-step workflow.
 
@@ -27,7 +27,7 @@ kf2v generates a 5s transition between first and last frames. By design the mode
 
 kf2v and vace produce **silent video only**. If the user also wants audio:
 
-1. **Switch mode**: If the user can relax the first+last frame constraint, recommend **wan2.6-i2v** (first-frame + audio, up to 15s) or **wan2.6-t2v** (text + audio, up to 15s). These support `audio_url` for custom audio or auto-dubbing.
+1. **Switch mode**: If the user can relax the first+last frame constraint, recommend **happyhorse-1.1-i2v** (default, first-frame + audio, 3–15s, TP+PAYG) or **happyhorse-1.1-t2v** (text + audio, 3–15s). Alternatively, **wan2.6-i2v** (first-frame + audio, up to 15s) or **wan2.6-t2v** (text + audio, up to 15s) also support `audio_url` for custom audio or auto-dubbing.
 2. **Post-process**: Generate the silent video first, then add an audio track (see [merge-media.md](merge-media.md) for ffmpeg/moviepy recipes), or use a separate TTS step (see **qianwen-audio-tts** for speech synthesis) to generate the audio file first.
 3. **Always inform the user** about the silent limitation before generating, and propose the alternative.
 

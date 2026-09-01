@@ -1,6 +1,6 @@
 # Qwen Audio TTS — Official Documentation
 
-> **Enriched API guide**: See [api-guide.md](api-guide.md) for complete documentation with code examples and voice list (validity: 2026-03).
+> **Enriched API guide**: See [api-guide.md](api-guide.md) for complete documentation with code examples and voice list.
 
 ## API Reference
 

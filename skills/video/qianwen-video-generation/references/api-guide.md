@@ -14,10 +14,10 @@ Video generation service based on the Wan model family and HappyHorse. Supports 
 
 | Scenario | Recommended Mode + Model | Notes |
 |----------|------------------------|-------|
-| Generate video from text description | t2v + `wan2.6-t2v` | Audio support, multi-shot, up to 15s. |
-| Animate a still image | i2v + `wan2.6-i2v-flash` | Fast, audio support, up to 15s. |
+| Generate video from text description | t2v + `happyhorse-1.1-t2v` | Audio output, TP+PAYG, 3–15s, 720P/1080P. For multi-shot use `--model wan2.6-t2v`. |
+| Animate a still image | i2v + `happyhorse-1.1-i2v` | Audio output, TP+PAYG, 3–15s. Uses `media=[{type:'first_frame',url}]`. |
 | Transition animation between two images | kf2v + `wan2.2-kf2v-flash` | First+last frame control, 5s, silent. |
-| Maintain character consistency across scenes | r2v + `wan2.6-r2v-flash` | Up to 5 reference characters. `wan2.6-r2v` for higher quality. |
+| Maintain character consistency across scenes | r2v + `happyhorse-1.1-r2v` | TP+PAYG, up to 9 refs. `wan2.6-r2v` for multi-shot quality. |
 | Style transfer / local editing / extension | vace + `wanx2.1-vace-plus` | Repainting, mask editing, extension, outpainting. |
 | Cinematic multi-shot narrative | t2v/i2v + `shot_type: "multi"` | Multiple camera angles and scenes in a single generation. |
 | Custom background music | t2v/i2v + `audio_url` | Provide an audio file for synchronized generation. |
@@ -86,7 +86,7 @@ Audio format: WAV or MP3, 3–30s duration, ≤15MB file size. If the audio is l
 
 | Parameter | Description |
 |-----------|-------------|
-| `model` | Model ID (e.g., `wan2.6-t2v`). |
+| `model` | Model ID (e.g., `happyhorse-1.1-t2v`). |
 | `prompt` | Text description. wan2.6/2.5: max 1,500 characters. wan2.2/2.1: max 800 characters. |
 | `negative_prompt` | Content to exclude. Max 500 characters. |
 | `size` | Resolution as width*height, e.g., `1280*720`. Used by t2v and r2v. |
@@ -149,7 +149,7 @@ HappyHorse 1.1 series (`happyhorse-1.1-t2v`, `happyhorse-1.1-i2v`, `happyhorse-1
 | Aspect | HappyHorse 1.0 | HappyHorse 1.1 |
 |--------|----------------|----------------|
 | Duration | 3–15s | 3–15s (same) |
-| Audio | Silent only | **With audio** (auto-generated) |
+| Audio | **With audio** (auto-generated) | **With audio** (auto-generated) |
 | Resolution | 720P/1080P | 720P/1080P |
 | Payload | Same as 1.1 | Same as 1.0 |
 
@@ -167,3 +167,91 @@ curl -sS 'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/v
     "parameters": {"resolution": "720P", "ratio": "16:9", "duration": 5}
   }'
 ```
+
+---
+
+## wan2.7-r2v / wan3.0-video / wan3.0-video-prime (verified contracts)
+
+> **Content validity**: 2026-08-27, real-call verified (`tmp/test-new-models/`). Sources:
+> [wan2.7-r2v](https://www.qianwenai.com/models/wan2.7-r2v) ·
+> [wan3.0-video](https://www.qianwenai.com/models/wan3.0-video) ·
+> [wan3.0-video-prime](https://www.qianwenai.com/models/wan3.0-video-prime)
+>
+> **PAYG-only** — these three models are **not available on Token Plan**. All share the same
+> endpoint (`/services/aigc/video-generation/video-synthesis`) and async submit→poll workflow
+> as the other Wan models. Under Token Plan (if attempted), local upload is unsupported — pass
+> references as `https://` or `oss://` URLs only.
+
+### wan2.7-r2v (multi-reference role-play)
+
+`input.media` accepts up to **5 mixed** references; `type` ∈ `reference_image` /
+`reference_video` / `reference_audio`. No `ratio` (auto-derived from references), no `fps`.
+
+```bash
+curl -sS 'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis' \
+  -H 'X-DashScope-Async: enable' \
+  -H "Authorization: Bearer $DASHSCOPE_API_KEY" \
+  -H 'X-DashScope-OssResourceResolve: enable' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "wan2.7-r2v",
+    "input": {
+      "prompt": "The character in the image is walking along a sunlit beach, hair blowing in the wind.",
+      "media": [
+        {"type": "reference_image", "url": "oss://.../ref.png"},
+        {"type": "reference_video", "url": "https://.../clip.mp4"}
+      ]
+    },
+    "parameters": {"resolution": "720P", "duration": 5, "prompt_extend": false, "watermark": true}
+  }'
+```
+
+| Parameter | Values | Notes |
+|-----------|--------|-------|
+| `resolution` | `720P` / `1080P` | Default `720P`. Minimum 720P (no 480P). |
+| `duration` | ≤10 (seconds) | |
+| `prompt_extend` | bool | Optional. |
+| `watermark` | bool | Optional. |
+
+### wan3.0-video / wan3.0-video-prime (all-in-one t2v + i2v)
+
+Unified model: **t2v** = `input.prompt` only (no `media`); **i2v** =
+`input.media=[{type:reference_image, url}]`. `wan3.0-video-prime` is the higher-quality
+variant using the identical payload.
+
+```bash
+# t2v (no media)
+curl -sS 'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis' \
+  -H 'X-DashScope-Async: enable' \
+  -H "Authorization: Bearer $DASHSCOPE_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "wan3.0-video",
+    "input": {"prompt": "A small cat running on a rooftop under moonlight, cinematic quality."},
+    "parameters": {"resolution": "480P", "ratio": "16:9", "duration": 5}
+  }'
+
+# i2v (reference image via media)
+curl -sS 'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis' \
+  -H 'X-DashScope-Async: enable' \
+  -H "Authorization: Bearer $DASHSCOPE_API_KEY" \
+  -H 'X-DashScope-OssResourceResolve: enable' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "wan3.0-video-prime",
+    "input": {
+      "prompt": "The character in the image is walking in a garden, cinematic quality.",
+      "media": [{"type": "reference_image", "url": "https://.../portrait.png"}]
+    },
+    "parameters": {"resolution": "480P", "ratio": "1:1", "duration": 5}
+  }'
+```
+
+| Parameter | Values | Notes |
+|-----------|--------|-------|
+| `resolution` | `480P` / `720P` / `1080P` | Default `1080P`. |
+| `ratio` | `adaptive` / `16:9` / `9:16` / `1:1` | Optional. |
+| `duration` | ≤30 (seconds) | Longer than wan2.7-r2v (≤10s). |
+
+The script auto-detects t2v vs i2v by whether a reference image (`img_url` /
+`reference_image` / `media`) is present, so no `--mode` flag is required.

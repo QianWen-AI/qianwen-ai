@@ -8,6 +8,11 @@ provides the in-depth selection logic for cross-skill resolution and per-domain 
 
 ## Cross-Skill Model Resolution
 
+> **Precondition**: Before evaluating dimensions below, determine the user's key type using
+> [SKILL.md § Detecting Key Type](../SKILL.md#detecting-key-type). If the key is
+> Token Plan (`sk-sp-`), restrict the candidate set to the
+> [Token Plan Models](#token-plan-models) section below — do not offer PAYG-only models.
+
 When an execution skill needs to choose a model without user interaction, evaluate across three dimensions:
 **Requirement → Scenario → Pricing**. If the user explicitly specified a model, use it as given — but still
 verify availability via CLI; if restricted, warn the user and suggest an alternative.
@@ -21,13 +26,13 @@ the task is ambiguous and you need to compare capabilities.
 |--------------------------------|---------------------------------------------------|--------------------------------------------------------------|
 | Reasoning                      | "think step by step", "reason", "analyze"         | qwq-plus (text) · qvq-max (vision)                           |
 | Coding                         | "write code", "implement", "debug"                | qwen3-coder-plus                                             |
-| OCR / document                 | "extract text", "OCR", "scan"                     | qwen-vl-ocr                                                  |
+| OCR / document                 | "extract text", "OCR", "scan"                     | qwen3.5-ocr (default) · qwen-vl-ocr                          |
 | Long context                   | "long document", "large file"                     | qwen3.7-plus (1M context)                                    |
 | Multimodal (text+image+video)  | "analyze image", "understand video" + text        | qwen3.7-plus (preferred multimodal)                          |
-| Voice interaction / omni       | "voice chat", "speak", "listen"                   | qwen3-omni-flash                                             |
-| Built-in tools                 | "search the web", "run code", "use tools"         | qwen3-max (web search, code interpreter)                     |
-| Image editing / style transfer | "edit image", "style transfer", "reference image" | wan2.6-image (preferred) · wan2.5-i2i-preview                |
-| Image-to-image fusion          | "place object", "combine images", "fuse images"   | wan2.6-image · wan2.5-i2i-preview                            |
+| Voice interaction / omni       | "voice chat", "speak", "listen"                   | qwen3.5-omni-plus                                            |
+| Built-in tools                 | "search the web", "run code", "use tools"         | qwen3.8-max (web search, code interpreter)                   |
+| Image editing / style transfer | "edit image", "style transfer", "reference image" | qwen-image-3.0-pro (preferred) · wan2.5-i2i-preview          |
+| Image-to-image fusion          | "place object", "combine images", "fuse images"   | qwen-image-3.0-pro · wan2.5-i2i-preview                      |
 | Open-source / lowest cost T2I  | "open-source", "free model", "z-image"            | z-image-turbo                                                |
 | Video editing                  | "edit video", "modify video", "video repaint"     | wan2.7-videoedit · happyhorse-1.0-video-edit                 |
 | Style TTS                      | "emotion", "tone", "pace"                         | qwen3-tts-instruct-flash                                     |
@@ -80,17 +85,15 @@ Given the candidates from dimensions 1–2, compare costs and apply modifiers.
 | Coding                  | qwen3-coder-plus | Best code model, 1M context                                          |
 | Coding (balanced)       | qwen3-coder-next | Top recommendation, balances quality/speed/cost, agentic + tools     |
 | Role-play (general)     | qwen-plus-character | Character restoration, empathetic dialog                          |
-| Role-play (Japanese)    | qwen-plus-character-ja | Japanese role-playing                                          |
 
 ### Vision Models
 
 | Use Case                       | Recommended    | Why                                                                                                                            |
 |--------------------------------|----------------|--------------------------------------------------------------------------------------------------------------------------------|
-| Best accuracy                  | qwen3.7-plus   | **Preferred.** Multimodal vision-language. Enhanced Agent execution & coding. 1M context. Thinking on by default. |
-| High-precision localization    | qwen3-vl-plus  | Highest vision understanding for object localization (2D/3D), document/webpage parsing. Thinking mode. 256K context.           |
-| Fast analysis                  | qwen3-vl-flash | Quick image understanding. Thinking mode supported.                                                                            |
+| Flagship model                 | qwen3.8-max    | **Preferred.** Strongest flagship. Multimodal (text, image, video). 1M context. Up to 2h video. Object localization (2D/3D), document/webpage parsing. Function Calling + built-in tools (web search, code interpreter). Structured output. Thinking on by default. |
+| Fast analysis                  | qwen3.8-flash  | Quick image understanding. Thinking mode supported.                                                                            |
 | Visual reasoning (math/charts) | qvq-max        | Always-on CoT for visual reasoning                                                                                             |
-| OCR specialist                 | qwen-vl-ocr    | Document/scan text extraction, max 30K tokens/image                                                                            |
+| OCR specialist                 | qwen3.5-ocr    | Latest recommended OCR. PDF parsing, multi-turn, enhanced card/ID recognition. Also: qwen-vl-ocr (legacy).                    |
 | Unified text+vision            | qwen3.7-plus   | Best when both text quality and vision matter. Enhanced Agent & GUI perception. 1M context. |
 
 ### Image Models
@@ -99,11 +102,11 @@ Given the candidates from dimensions 1–2, compare costs and apply modifiers.
 |-------------------------------------------|--------------------|------------------------------------------------------------------|
 | Highest quality (4K)                      | wan2.7-image-pro   | Up to 4K, multi-function, thinking mode                          |
 | Multi-function (2K)                       | wan2.7-image       | Faster variant of pro, 2K max                                    |
-| Quality text-to-image                     | wan2.6-t2i         | Best in wan2.6 series                                            |
-| Image **editing** (refs required)         | wan2.6-image       | Style transfer, subject consistency (1–4 refs), interleave 2K    |
+| Quality text-to-image                     | qwen-image-3.0-pro | Latest flagship; high quality, strong text rendering            |
+| Image **editing** (refs required)         | qwen-image-3.0-pro | Style transfer, subject consistency, multi-image editing         |
 | Image-to-image fusion                     | wan2.5-i2i-preview | Multi-image fusion (1–3 refs), async-only                        |
-| Interleaved text-image output (tutorials) | wan2.6-image       | Mixed text+image generation                                      |
-| Fast iteration                            | wan2.2-t2i-flash   | 50% faster generation                                            |
+| Interleaved text-image output (tutorials) | qwen-image-3.0-pro | Mixed text+image generation                                      |
+| Fast iteration                            | z-image-turbo      | Lightweight open-source T2I, fast generation                     |
 | Flexible resolution                       | wan2.5-t2i-preview | Custom aspect ratios                                             |
 | Open-source SOTA T2I                      | z-image-turbo      | Open-source; sync-only; no `n` / no refs; lightweight payload    |
 
@@ -111,7 +114,10 @@ Given the candidates from dimensions 1–2, compare costs and apply modifiers.
 
 | Use Case                         | Recommended                | Why                                                            |
 |----------------------------------|----------------------------|----------------------------------------------------------------|
-| Latest (with audio)              | wan2.7-t2v / i2v           | 720P/1080P, auto-dubbing                                       |
+| Default (with audio)             | happyhorse-1.1-t2v / i2v   | **Latest default.** 720P/1080P, 3–15s, with audio             |
+| Wan family (with audio)          | wan2.7-t2v / i2v           | 720P/1080P, auto-dubbing                                       |
+| Latest generation (Wan 3.0)      | wan3.0-video / -prime      | Wan 3.0 unified video; `-prime` for highest quality            |
+| Reference-to-video (Wan)         | wan2.7-r2v                 | Up to 5 image/video refs, audio voice reference, 720P/1080P    |
 | Text-to-video (HappyHorse)       | happyhorse-1.1-t2v         | **Latest HappyHorse 1.1.** 720P/1080P, 3–15s, with audio       |
 | Image-to-video (HappyHorse)      | happyhorse-1.1-i2v         | HappyHorse 1.1 i2v, 720P/1080P, 3–15s, with audio              |
 | Reference-to-video (HappyHorse)  | happyhorse-1.1-r2v         | Multi-ref images, 720P/1080P, 3–15s, with audio                 |
@@ -139,56 +145,65 @@ Given the candidates from dimensions 1–2, compare costs and apply modifiers.
 
 | Use Case            | Recommended               | Why                                                                                   |
 |---------------------|---------------------------|---------------------------------------------------------------------------------------|
-| Voice + vision chat | qwen3-omni-flash          | Text/image/audio/video → text or speech. 49 voices, 10 languages. Thinking supported. |
+| Voice + vision chat | qwen3.5-omni-plus         | Text/image/audio/video input, text + audio output. Latest flagship omni. Thinking supported. |
+| Voice + vision (fast) | qwen3.5-omni-flash      | Faster latest omni. Text/image/audio/video input, text + audio output.                |
 | Real-time voice     | qwen3-omni-flash-realtime | Streaming audio input + built-in VAD. 49 voices.                                      |
 
 ## Token Plan Models
 
-Users with a [Token Plan](https://platform.qianwenai.com/docs/token-plan/overview#%E5%A5%97%E9%A4%90%E4%B8%8E%E5%AE%9A%E4%BB%B7) subscription
-(`sk-sp-` key) have access to a fixed set of models **only through interactive AI tools** (Cursor,
-Claude Code, Qwen Code, Qoder, Qoder CN, OpenClaw, OpenCode, Codex, Kilo Code/CLI, Hermes Agent). `sk-sp-` keys are
-**strictly forbidden** in automation scripts, application backends, batch jobs, API testing tools,
-and workflow platforms. Any non-interactive use may trigger **subscription suspension or API Key
-revocation** on the platform side. Do **not** override `QWEN_BASE_URL` to redirect an `sk-sp-` key
-anywhere, and do **not** attempt to bypass the client-side hard-fail in `qianwen_lib.py`.
+> **This is the exclusive candidate set for Token Plan (`sk-sp-`) keys.** When the key type detection finds a
+> Token Plan key, cross-skill resolution and interactive advisory MUST filter recommendations to
+> this section only. Do not offer PAYG-only models to Token Plan users.
+>
+> Canonical source: `qianwen-ops-auth/references/tokenplan.md`
 
-### Text Models (Personal: 8 / Team: 17)
+Token Plan keys (`sk-sp-...`) are supported when an interactive AI tool invokes this Skill for the
+current user. Read `qianwen-ops-auth/references/tokenplan.md` when installed; otherwise read the
+official [Personal](https://platform.qianwenai.com/docs/token-plan/personal/token-plan-personal-overview.md),
+[Team](https://platform.qianwenai.com/docs/token-plan/team/token-plan-team-overview.md), and [multimodal](https://platform.qianwenai.com/docs/token-plan/best-practices/multimodal-generation.md)
+Markdown. Select and pass an exact model; do not probe or automatically fall back to PAYG.
+
+### Text Models (Personal: 9 / Team: 18)
 
 **Personal version**:
 
 | Model           | Context | Thinking         | Notes                                                      |
 |-----------------|--------:|------------------|------------------------------------------------------------|
 | `qwen3.8-max`   |      1M | Yes (default on) | Strongest flagship. Multimodal. Night 50% off promo.       |
+| `qwen3.8-flash`  |      1M | Yes (default on) | Multimodal. Fast. Thinking mode.                           |
 | `qwen3.7-max`   |      1M | Yes (default on) | Text-only. Strongest agentic coding, long-horizon.          |
 | `qwen3.7-plus`  |      1M | Yes (default on) | **Recommended default.** Multimodal vision-language. Enhanced Agent, coding, GUI perception. |
 | `qwen3.6-flash` |      1M | Yes (default on) | Multimodal. Fast. Vision understanding.                    |
 | `glm-5.2`       |      1M | Yes              | Third party (Zhipu). Long-horizon tasks.                   |
-| `deepseek-v4-pro` |   128K | Yes              | Third party (DeepSeek).                                    |
+| `deepseek-v4-pro` |      1M | Yes              | Third party (DeepSeek).                                    |
+| `deepseek-v4-pro-0813` |   1M | Yes          | Third party (DeepSeek). Latest v4-pro snapshot.            |
 | `deepseek-v4-flash-0731` | 1M | Yes          | Third party (DeepSeek). Lightweight MoE. Not Responses API. |
 
-**Team version** (additional models beyond personal):
+**Team version** (additional models beyond personal, 18 total):
 
 | Model           | Context | Notes                                                      |
 |-----------------|--------:|------------------------------------------------------------|
 | `qwen3.6-plus`  |      1M | Multimodal text + image + video.                           |
-| `deepseek-v4-flash` | 128K | Third party (DeepSeek).                                   |
-| `deepseek-v3.2` |   128K | Third party (DeepSeek).                                    |
-| `kimi-k2.7-code` |  256K | Third party (Moonshot). Coding specialist.                 |
-| `kimi-k2.6`    |    256K | Third party (Moonshot).                                    |
-| `kimi-k2.5`    |    256K | Third party (Moonshot).                                    |
-| `glm-5.1`      |    198K | Third party (Zhipu).                                       |
-| `glm-5`        |    198K | Third party (Zhipu).                                       |
-| `MiniMax-M2.5`  |   192K | Third party (MiniMax).                                     |
+| `deepseek-v4-flash` |   1M | Third party (DeepSeek).                                   |
+| `deepseek-v3.2` |   131K | Third party (DeepSeek).                                    |
+| `kimi-k2.7-code` |  262K | Third party (Moonshot). Coding specialist.                 |
+| `kimi-k2.6`    |    262K | Third party (Moonshot).                                    |
+| `kimi-k2.5`    |    262K | Third party (Moonshot).                                    |
+| `glm-5.1`      |    202K | Third party (Zhipu).                                       |
+| `glm-5`        |    202K | Third party (Zhipu).                                       |
+| `MiniMax-M2.5`  |   204K | Third party (MiniMax).                                     |
 
 ### Image Generation Models
 
-> [!IMPORTANT]
-> Token Plan image models are **not** reachable from the standard text API. They must be wired up
-> via each interactive AI tool's Skill / Slash Command / Agent mechanism, and **must not** be
-> invoked from automation scripts under any circumstance.
+> [!NOTE]
+> Token Plan image models are not available through the OpenAI-compatible `/chat/completions` API.
+> In an interactive AI tool, invoke them through the qianwen-image-generation Skill, which calls
+> the image-generation API. Do not use Token Plan keys in application backends, unattended
+> automation, batch jobs, or API testing tools.
 
 | Model                | Notes                                                              |
 |----------------------|--------------------------------------------------------------------|
+| `qwen-image-3.0-pro` | Latest flagship image model; high quality, strong text rendering    |
 | `qwen-image-2.0`     | Default; general-purpose; strong Chinese text rendering (Team only) |
 | `qwen-image-2.0-pro` | Higher quality, slightly slower (Team only)                        |
 | `wan2.7-image`       | Multi-style; returns 4 images by default                           |
@@ -210,18 +225,19 @@ Available sizes: `1024*1024` (default), `720*1280`, `1280*720`. `wan2.7-image-pr
 |----------------------------|--------------------------------------------------------|
 | `qwen-audio-3.0-tts-plus` | Highest quality TTS. Multi-language + Chinese dialects.  |
 
+`qwen-audio-3.0-realtime-plus` is in the Token Plan catalog but is not implemented by this Skill.
+
 ### Excluded Modalities
 
-Token Plan does **not** include general vision models (qwen3-vl-*, qwen-vl-ocr, qvq-max),
+Token Plan does **not** include general vision models (qwen3-vl-*, qwen3.5-ocr, qwen-vl-ocr, qvq-max),
 embeddings, rerank, translation, ASR, or pay-as-you-go TTS models (cosyvoice, qwen3-tts-flash).
-Users needing those must fall back to a standard pay-as-you-go `sk-` key.
+Users needing those must explicitly choose a standard pay-as-you-go key and make a separate request.
 
 When recommending models, note if the user's chosen model falls outside the lists above and they are
-using a Token Plan key (`sk-sp-...`). Suggest the closest available alternative or recommend obtaining
-a standard `sk-` key.
+using a Token Plan key (`sk-sp-...`). Explain the limitation; do not silently replace the model.
 
 If `qianwen-ops-auth` is installed, see its `references/tokenplan.md` for Credits billing details,
-full error code reference, and the platform's forbidden-use policy.
+full error code reference, and the platform's usage policy.
 
 ### Billing (Credits)
 
@@ -237,6 +253,7 @@ Several models support hybrid thinking/non-thinking modes:
 | Model                               | Thinking Default | Notes                                                                                         |
 |-------------------------------------|------------------|-----------------------------------------------------------------------------------------------|
 | qwen3.8-max                         | **On**           | Strongest flagship. Thinking enabled by default. Use `enable_thinking: false` to disable.  |
+| qwen3.8-flash                       | **On**           | Fast Qwen3.8. Multimodal. Thinking enabled by default. Use `enable_thinking: false` to disable. |
 | qwen3.7-max                         | **On**           | Text-only flagship. Thinking enabled by default. Use `enable_thinking: false` to disable.  |
 | qwen3.7-plus                        | **On**           | Multimodal. Thinking enabled by default. Use `enable_thinking: false` to disable.          |
 | qwen3.7-flash                       | **On**           | Multimodal. Thinking enabled by default.                                                   |
@@ -259,14 +276,14 @@ multi-step analysis.
 > `qianwen models list --all --format json` for the up-to-date catalog. See [model-list.md](model-list.md)
 > for the structured offline reference.
 
-- **Text (commercial)**: qwen3.8-max, qwen3.7-max, qwen3.7-plus, qwen3.7-flash, qwen3.6-max-preview, qwen3.6-plus, qwen3.6-flash, qwen3-max, qwen3.5-plus, qwen3.5-flash, qwen-turbo, qwq-plus, qwen3-coder-next/plus/flash, qwen-plus-character, qwen-plus-character-ja, qwen-flash-character
-- **Text (open-source)**: qwen3.6-27b, qwen3.5-27b
+- **Text (commercial)**: qwen3.8-max, qwen3.8-flash, qwen3.7-max, qwen3.7-plus, qwen3.7-flash, qwen3.6-max-preview, qwen3.6-plus, qwen3.6-flash, qwen3-max, qwen3.5-plus, qwen3.5-flash, qwen-turbo, qwq-plus, qwen3-coder-next/plus/flash, qwen-plus-character, qwen-flash-character
+- **Text (open-source)**: qwen3.8-27b, qwen3.8-2.4t-a95b, qwen3.6-27b, qwen3.5-27b
 - **Text (third-party)**: deepseek-v4-flash, deepseek-v4-flash-0731, glm-5.2, glm-5.1, kimi-k3, kimi-k2.6, MiniMax-M2.5
-- **Vision**: qwen3.6-plus (multimodal), qwen3.7-plus (multimodal), qwen3-vl-plus, qwen3-vl-flash, qvq-max, qwen-vl-ocr, qwen-vl-max, qwen-vl-plus
-- **Omni**: qwen3-omni-flash (+ realtime), qwen-omni-turbo (+ realtime)
+- **Vision**: qwen3.6-plus (multimodal), qwen3.7-plus (multimodal), qwen3-vl-plus, qwen3-vl-flash, qvq-max, qwen3.5-ocr, qwen-vl-ocr, qwen-vl-max, qwen-vl-plus
+- **Omni**: qwen3.5-omni-plus, qwen3.5-omni-flash, qwen3-omni-flash (+ realtime), qwen-omni-turbo (+ realtime)
 - **Image generation (text-to-image)**: wan2.7-image-pro, wan2.7-image, wan2.6-t2i, wan2.5-t2i-preview, wan2.2-t2i-flash, z-image-turbo
-- **Image editing (requires reference images)**: wan2.6-image, wan2.5-i2i-preview, qwen-image-2.0-pro, qwen-image-2.0-pro-2026-06-22
-- **Video generation**: wan2.7-t2v/i2v/videoedit, wan2.6 series, wan2.5/2.2 series, vace, happyhorse-1.1-t2v/i2v/r2v, happyhorse-1.0-t2v/i2v/r2v/video-edit
+- **Image editing (requires reference images)**: qwen-image-3.0-pro, qwen-image-3.0, wan2.6-image, wan2.5-i2i-preview, qwen-image-2.0-pro, qwen-image-2.0-pro-2026-06-22
+- **Video generation**: wan2.7-t2v/i2v/videoedit, wan2.7-r2v, wan3.0-video/-prime, wan2.6 series, wan2.5/2.2 series, vace, happyhorse-1.1-t2v/i2v/r2v, happyhorse-1.0-t2v/i2v/r2v/video-edit
 - **TTS**: qwen-audio-3.0-tts-plus/flash, cosyvoice-v3.5-plus/flash, cosyvoice-v3-plus/flash, qwen3-tts-flash, qwen3-tts-instruct-flash
 - **ASR**: qwen3-asr-flash, fun-asr
 - **Embedding/Rerank**: text-embedding-v4, qwen3-rerank

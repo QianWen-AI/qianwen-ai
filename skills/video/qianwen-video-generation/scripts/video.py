@@ -24,17 +24,20 @@ import argparse
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from qianwen_lib import (  # noqa: E402
     download_file,
     http_request,
+    is_token_plan_key,
     load_request,
     native_base_url,
     poll_task,
     require_api_key,
     run_update_signal,
+    validate_token_plan_model,
 )
 from video_lib import (  # noqa: E402
     DEFAULT_MODELS,
@@ -58,6 +61,12 @@ from video_lib import (  # noqa: E402
 _NOT_ACTIVATED_KEYWORDS = ("not activated", "not subscribed", "not enabled",
                            "product is not activated", "model not subscribed")
 _MODEL_MARKET_URL = "https://www.qianwenai.com/models"
+_TOKEN_PLAN_CONSOLE_URL = (
+    "https://platform.qianwenai.com/home/billing/subscription/token-plan"
+)
+_VIDEO_EXTENSIONS = frozenset({
+    ".mp4", ".mov", ".webm", ".mkv", ".m4v", ".avi", ".flv", ".wmv", ".ts",
+})
 
 
 def _check_not_activated(error_msg: str, model: str) -> bool:
@@ -91,12 +100,22 @@ def _handle_result(result: dict[str, Any], args: argparse.Namespace,
         print(f"Error: No video URL in result: {result}", file=sys.stderr)
         sys.exit(1)
 
-    args.output.mkdir(parents=True, exist_ok=True)
-    resp_file = args.output / "response.json"
+    # Determine output: user-specified filename (video extension) vs directory
+    if args.output.suffix.lower() in _VIDEO_EXTENSIONS:
+        video_file = args.output
+        out_dir = video_file.parent
+    else:
+        out_dir = args.output
+        url_basename = Path(urlparse(video_url).path).name
+        if url_basename and "." in url_basename:
+            video_file = out_dir / url_basename
+        else:
+            video_file = out_dir / "video.mp4"
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    resp_file = out_dir / "response.json"
     resp_file.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Response saved to {resp_file}", file=sys.stderr)
-
-    video_file = args.output / "video.mp4"
     try:
         download_file(video_url, video_file)
     except Exception as e:
@@ -276,10 +295,19 @@ examples:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
+    # CLI --model takes precedence over any "model" in the request JSON. Inject it
+    # into `request` BEFORE detect_mode() so that model-based routing (R2V for
+    # wan2.7-r2v / happyhorse-r2v, wan3.0-video t2v/i2v, video-edit) fires even when
+    # the model is supplied only via --model. Otherwise detect_mode() would see the
+    # `media` field first and misclassify wan2.7-r2v/happyhorse-r2v as i2v, bypassing
+    # their dedicated builders (and the wan2.7-r2v len(media)<=5 guard).
+    if args.model:
+        request["model"] = args.model
     mode = args.mode or detect_mode(request)
     model = args.model or request.get("model") or DEFAULT_MODELS[mode]
     # Model-aware correction: wan2.7-i2v / happyhorse-i2v use first_frame_url
     # but belong to i2v mode (detect_mode would have classified them as kf2v).
+    # (detect_mode has no wan2.7-i2v branch, so this correction is still required.)
     if model in _WAN27_I2V_MODELS or model in _HAPPYHORSE_I2V_MODELS:
         if mode == MODE_KF2V:
             mode = MODE_I2V
@@ -288,18 +316,26 @@ examples:
         mode = MODE_VIDEO_EDIT
     duration = request.get("duration", 5)
     resolution = resolve_resolution(request, mode)
-    cost_str = estimate_cost(model, duration, resolution)
+    token_plan = is_token_plan_key(api_key)
+    validate_token_plan_model(api_key, model)
+    cost_str = None if token_plan else estimate_cost(model, duration, resolution)
 
     if verbose:
         info = f"Mode: {mode} | Model: {model}"
-        if cost_str:
+        if token_plan:
+            info += f" | Credits: see {_TOKEN_PLAN_CONSOLE_URL}"
+        elif cost_str:
             info += f" | Cost: {cost_str}"
         print(info, file=sys.stderr)
 
     resolve_request_urls(request, api_key, model, RESOLVE_KEYS[mode])
 
     builder = PAYLOAD_BUILDERS[mode]
-    payload = builder(request, model)
+    try:
+        payload = builder(request, model)
+    except (ValueError, KeyError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     url = f"{native_base_url()}{ENDPOINTS[mode]}"
 

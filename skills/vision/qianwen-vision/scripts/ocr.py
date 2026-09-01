@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OCR text extraction with qwen-vl-ocr.
+"""OCR text extraction with qwen3.5-ocr (default) / qwen-vl-ocr.
 
 Optimized for dense text: scanned documents, receipts, tickets, tables, formulas.
 Supports pixel-level control (min_pixels/max_pixels) for resolution vs cost trade-off.
@@ -30,9 +30,10 @@ from vision_lib import (  # noqa: E402
     resolve_file,
     save_result,
     try_parse_json,
+    validate_token_plan_model,
 )
 
-DEFAULT_MODEL = "qwen-vl-ocr"
+DEFAULT_MODEL = "qwen3.5-ocr"
 DEFAULT_PROMPT = "Please output only the text content from the image without any additional descriptions or formatting."
 DEFAULT_MAX_TOKENS = 4096
 
@@ -99,13 +100,13 @@ def ocr(req: dict[str, Any], api_key: str, *, upload_files: bool = False) -> dic
 def main() -> None:
     prompt_update_check_install()
     parser = argparse.ArgumentParser(
-        description="OCR text extraction with qwen-vl-ocr",
+        description="OCR text extraction with qwen3.5-ocr",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 request JSON fields (--request / --file):
   image             (required) Image URL or local path
   prompt            Extraction instruction (default: extract all text)
-  model             Model ID (default: qwen-vl-ocr)
+  model             Model ID (default: qwen3.5-ocr; also supports qwen-vl-ocr)
   json_mode         true — output as structured JSON (also via --json-mode)
   min_pixels        Minimum image pixels (increase for fine text)
   max_pixels        Maximum image pixels (decrease to reduce cost)
@@ -149,17 +150,28 @@ examples:
     args = parser.parse_args()
 
     api_key = require_api_key()
-    req = load_request(args)
+
+    try:
+        req = load_request(args)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if args.model:
         req["model"] = args.model
     elif "model" not in req or not req.get("model"):
         req["model"] = DEFAULT_MODEL
 
+    validate_token_plan_model(api_key, req["model"])
+
     if args.json_mode:
         req["json_mode"] = True
 
-    result = ocr(req, api_key, upload_files=args.upload_files)
+    try:
+        result = ocr(req, api_key, upload_files=args.upload_files)
+    except (ValueError, RuntimeError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if args.output:
         save_result(result, args.output)

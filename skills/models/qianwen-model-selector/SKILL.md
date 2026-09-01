@@ -4,10 +4,44 @@ description: "Recommend the best Qwen model and parameters. TRIGGER when: choosi
 compatibility: "Advisory skill, no execution dependencies. Cursor: auto-loaded. Claude Code: read this skill's SKILL.md before first use."
 ---
 
-> **Agent setup**: If your agent doesn't auto-load skills (e.g. Claude Code),
-> see [agent-compatibility.md](references/agent-compatibility.md) once per session.
-
 # Qwen Model Selector (Advisor)
+
+## Detecting Key Type
+
+Run this command to detect the API key type (outputs `token-plan`, `payg`, or `not-set`):
+
+```bash
+python3 -c "
+import os
+from pathlib import Path
+env_file = Path('.env')
+if not env_file.exists():
+    for parent in [Path.cwd()] + list(Path.cwd().parents):
+        if (parent / '.git').exists() or (parent / 'skills').is_dir():
+            env_file = parent / '.env'
+            break
+if env_file.exists():
+    for line in env_file.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, v = line.split('=', 1)
+        k, v = k.strip(), v.strip().strip('\"').strip(\"'\")
+        if k in ('QIANWEN_API_KEY', 'DASHSCOPE_API_KEY') and k not in os.environ:
+            os.environ[k] = v
+key = os.environ.get('QIANWEN_API_KEY') or os.environ.get('DASHSCOPE_API_KEY') or ''
+print('token-plan' if key.startswith('sk-sp-') else 'payg' if key else 'not-set')
+"
+```
+
+| Output | Billing mode | Action |
+|--------|-------------|--------|
+| `token-plan` | Token Plan (Credits) | Select only from [Token Plan list](references/recommendation-matrix.md#token-plan-models). Default to Team superset when edition unknown. |
+| `payg` | Pay-as-you-go | Full model catalog available; continue below. |
+| `not-set` | No key configured | **Do not block.** Ask the user: "Which approach do you plan to use? (1) Standard PAYG key (2) Token Plan key (3) Skip for now — just browse recommendations." Proceed based on their choice. |
+
+> **Windows**: If `python3` is not available, use `python`. The multi-line `-c` string works in both
+> PowerShell and CMD. Alternatively, save the snippet to a temporary `.py` file and run it.
 
 This skill operates in two modes:
 
@@ -27,11 +61,10 @@ Load on demand. Do not fetch external URLs unless the user explicitly asks for t
 | `references/cli-usage.md`                 | **CLI-first data strategy**: when to use CLI, 3-step login flow, display rules   |
 | `references/error-handling.md`            | CLI error classification & recovery actions (auth, not-found, network, ...)      |
 | `references/recommendation-matrix.md`     | Full model recommendation tables, Cross-Skill Resolution, Token Plan, Thinking |
-| `references/pricing-disclaimer.md`        | Pricing guidance + **mandatory** cost-estimation disclaimer (CN/EN) + console links |
-| `references/pricing.md`                   | Pricing structural overview (offline snapshot)                                   |
-| `references/model-list.md`                | Model catalog (offline snapshot)                                                 |
+| `references/pricing-disclaimer.md`        | PAYG only: pricing disclaimer (CN/EN) + console links                            |
+| `references/pricing.md`                   | PAYG only: pricing structural overview (offline snapshot)                       |
+| `references/model-list.md`                | PAYG only: model catalog (offline snapshot)                                     |
 | `references/sources.md`                   | Official documentation URLs (manual lookup only)                                 |
-| `references/agent-compatibility.md`       | Agent self-check for skill registration                                          |
 
 ## Prerequisites
 
@@ -84,6 +117,9 @@ the recovery actions in the higher tier first.**
 
 ## Diagnostic Flow (Interactive Advisory)
 
+> **Prerequisite**: Complete [Detecting Key Type](#detecting-key-type) above and narrow the candidate set before
+> proceeding. All recommendations below must stay within the user's billing scope.
+
 Ask the user (in order):
 
 1. **Content type?** — text / image / video / audio / vision
@@ -100,14 +136,14 @@ OCR, role-play, image editing, etc.) and per-domain comparison, see
 
 | Domain              | Default          | Quality          | Speed              | Cost               |
 |---------------------|------------------|------------------|--------------------|--------------------|
-| text.chat           | qwen3.8-max      | qwen3.8-max      | qwen3.7-flash      | qwen-turbo         |
+| text.chat           | qwen3.7-plus     | qwen3.8-max      | qwen3.7-flash      | qwen-turbo         |
 | text.chat (balanced)| qwen3.7-plus     | qwen3.7-max      | qwen3.7-flash      | qwen3.7-flash      |
-| vision.analyze      | qwen3.6-plus     | qwen3-vl-plus    | qwen3-vl-flash     | qwen3-vl-flash     |
-| omni (voice+vision) | qwen3-omni-flash | qwen3-omni-flash | qwen3-omni-flash   | —                  |
-| image.generate      | wan2.6-t2i       | wan2.6-t2i       | wan2.2-t2i-flash   | wan2.2-t2i-flash · z-image-turbo (open-source) |
-| image.edit          | wan2.6-image     | wan2.6-image     | wan2.5-i2i-preview | wan2.5-i2i-preview |
-| video.t2v           | wan2.7-t2v       | wan2.7-t2v       | happyhorse-1.1-t2v | —                  |
-| video.i2v           | wan2.7-i2v       | wan2.7-i2v       | happyhorse-1.1-i2v | —                  |
+| vision.analyze      | qwen3.7-plus     | qwen3.8-max      | qwen3.8-flash      | qwen3.8-flash      |
+| omni (voice+vision) | qwen3.5-omni-plus | qwen3.5-omni-plus | qwen3.5-omni-flash | —                  |
+| image.generate      | wan2.7-image     | qwen-image-3.0-pro | wan2.2-t2i-flash   | wan2.2-t2i-flash · z-image-turbo (open-source) |
+| image.edit          | wan2.7-image     | qwen-image-3.0-pro | wan2.5-i2i-preview | wan2.5-i2i-preview |
+| video.t2v           | happyhorse-1.1-t2v | wan2.7-t2v       | happyhorse-1.1-t2v | —                  |
+| video.i2v           | happyhorse-1.1-i2v | wan2.7-i2v       | happyhorse-1.1-i2v | —                  |
 | video.edit          | wan2.7-videoedit | wan2.7-videoedit | happyhorse-1.0-video-edit | —           |
 | audio.tts           | qwen-audio-3.0-tts-plus | qwen-audio-3.0-tts-plus | cosyvoice-v3.5-flash | qwen3-tts-flash |
 
@@ -156,14 +192,15 @@ When CLI fails, **classify first, recover, then retry**. Never silently fall bac
 | `not-installed`   | Show install command → ask user to install → retry. Do NOT silently use snapshot.   |
 | `model-not-found` | Run `qianwen models search "<keyword>"` → propose top 3 → retry with correct ID.    |
 | `network-timeout` | Retry once after 2s; only after second failure ask whether to fall back.            |
-| `rate-limit`      | Show [Rate Limit Console](https://platform.qianwenai.com/home/settings/monitoring/rate-limit); user decides. |
 | `quota-exhausted` | Show [Billing Console](https://platform.qianwenai.com/home/billing/pay-as-you-go); do NOT use snapshot. |
 | `version-mismatch`| Suggest `qianwen version --check` or update-check skill → upgrade → retry.          |
 | `other`           | Show raw stderr; link to docs; only after user opt-out, fall back.                  |
 
 Full classification, signals, and example flows: [error-handling.md](references/error-handling.md).
 
-## Pricing & Cost Estimation
+## Pricing & Cost Estimation (PAYG only)
+
+Skip this section for Token Plan.
 
 - **Latest pricing**: Run `qianwen models info <model> --format json` first; use `pricing.md` only as
   offline fallback. **Never invent a price.**
@@ -188,6 +225,10 @@ When the user asks to check for updates ("check for updates", "check version", "
 ## Anti-Patterns
 
 - **Never fabricate model names** — only recommend models listed in this skill or returned by CLI.
+- **Never infer the API key type from the request wording** — use the configured Key or calling context.
+- **Never recommend a model outside the user's billing scope** — Token Plan keys must only receive
+  models from the [Token Plan list](references/recommendation-matrix.md#token-plan-models); PAYG
+  keys may use the full catalog. Violating this causes hard failures for the user.
 - **Never invent or guess any price figure** — use CLI / `pricing.md` / official pricing page only.
   Fabricating a price is a **critical failure**.
 - **Never silently fall back to snapshots when CLI errors out** — apply
@@ -215,7 +256,6 @@ When the user asks to check for updates ("check for updates", "check version", "
 | [pricing.md](references/pricing.md)                          | Pricing structural overview (offline snapshot)                   |
 | [model-list.md](references/model-list.md)                    | Model catalog (offline snapshot)                                 |
 | [sources.md](references/sources.md)                          | Official documentation URLs                                      |
-| [agent-compatibility.md](references/agent-compatibility.md)  | Agent self-check for skill registration                          |
 | `qianwen models list --format json`                          | Dynamic: full model catalog with pricing, features, quotas       |
 | `qianwen models info <id> --format json`                     | Dynamic: single model details (pricing tiers, context, rate limits) |
 | `qianwen models search "<q>" --format json`                  | Dynamic: keyword-based model discovery                           |

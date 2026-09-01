@@ -18,7 +18,7 @@ from qianwen_lib import resolve_file  # noqa: E402
 # Model classification constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL = "wan2.6-t2i"
+DEFAULT_MODEL = "wan2.7-image"
 DEFAULT_SIZE = "1280*1280"
 
 SYNC_PATH = "/services/aigc/multimodal-generation/generation"
@@ -32,13 +32,18 @@ _MULTI_FUNC_MODELS: frozenset[str] = frozenset({
 })  # Support both t2i and image editing, no reference_images required
 _I2I_MODELS: frozenset[str] = frozenset({"wan2.5-i2i-preview"})
 _QWEN_IMAGE_EDIT_MODELS: frozenset[str] = frozenset({
+    "qwen-image-3.0-pro", "qwen-image-3.0",
     "qwen-image-2.0-pro", "qwen-image-2.0",
     "qwen-image-edit-max", "qwen-image-edit-plus", "qwen-image-edit",
 })
 _QWEN_IMAGE_EDIT_PREFIXES: tuple[str, ...] = (
+    "qwen-image-3.0-pro-", "qwen-image-3.0-",
     "qwen-image-2.0-pro-", "qwen-image-2.0-",
     "qwen-image-edit-max-", "qwen-image-edit-plus-", "qwen-image-edit-",
 )
+# qwen-image-3.0 series: exclusive API features (enable_thinking, prompt_extend_mode)
+# and NO default size (model auto-recommends resolution when size is omitted).
+_QWEN_IMAGE_30_MODELS: frozenset[str] = frozenset({"qwen-image-3.0-pro", "qwen-image-3.0"})
 _QWEN_T2I_MODELS: frozenset[str] = frozenset({"qwen-image-plus", "qwen-image-max"})
 _QWEN_T2I_VALID_SIZES: frozenset[str] = frozenset({
     "1664*928", "1472*1104", "1328*1328", "1104*1472", "928*1664",
@@ -235,10 +240,10 @@ def build_payload(req: dict[str, Any], model: str, api_key: str) -> dict[str, An
         parameters["enable_sequential"] = enable_sequential
         if enable_sequential:
             # Sequential mode: n=1-12
-            parameters["n"] = min(req.get("n", 12), 12)
+            parameters["n"] = min(req.get("n", 1), 12)
         else:
             # Non-sequential: n=1-4
-            parameters["n"] = min(req.get("n", 4), 4)
+            parameters["n"] = min(req.get("n", 1), 4)
         # thinking_mode: default true (only for t2i without sequential)
         images = req.get("reference_images") or []
         if not images and req.get("reference_image"):
@@ -253,13 +258,28 @@ def build_payload(req: dict[str, Any], model: str, api_key: str) -> dict[str, An
         if not enable_sequential and req.get("color_palette"):
             parameters["color_palette"] = req["color_palette"]
     elif is_qwen_edit:
-        parameters = {"size": req.get("size", "1024*1024")}
+        is_qwen_30 = model in _QWEN_IMAGE_30_MODELS
+        if is_qwen_30:
+            # qwen-image-3.0 series: NO default size -- only pass size when explicitly
+            # provided, so the model auto-recommends resolution otherwise.
+            parameters = {}
+            if req.get("size"):
+                parameters["size"] = req["size"]
+        else:
+            parameters = {"size": req.get("size", "1024*1024")}
         if model in _QWEN_IMAGE_EDIT_SINGLE_OUTPUT:
             parameters["n"] = 1
         else:
             parameters["n"] = req.get("n", 1)
         parameters["prompt_extend"] = req.get("prompt_extend", True)
         parameters["watermark"] = req.get("watermark", False)
+        if is_qwen_30:
+            # 3.0-exclusive params: pass through only when explicitly provided.
+            # Use membership check so a literal False for enable_thinking is honored.
+            if "enable_thinking" in req:
+                parameters["enable_thinking"] = req["enable_thinking"]
+            if req.get("prompt_extend_mode"):
+                parameters["prompt_extend_mode"] = req["prompt_extend_mode"]
     else:
         parameters = {"size": req.get("size", DEFAULT_SIZE)}
         parameters["prompt_extend"] = req.get("prompt_extend", True)

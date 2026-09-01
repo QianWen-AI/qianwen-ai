@@ -1,6 +1,6 @@
 # Qwen Image Generation — API Supplementary Guide
 
-> **Content validity**: 2026-07 | **Sources**: [Text-to-Image API](https://platform.qianwenai.com/docs/developer-guides/image-generation/text-to-image) · [Image Generation Guide](https://platform.qianwenai.com/docs/developer-guides/image-generation/text-to-image) · [Wan2.6-Image API](https://platform.qianwenai.com/docs/api-reference/image-generation/wan26-image-gen-edit/create-task) · [Z-Image-Turbo](https://www.qianwenai.com/models/z-image-turbo)
+> **Content validity**: 2026-07 | **Sources**: [Text-to-Image API](https://platform.qianwenai.com/docs/developer-guides/image-generation/text-to-image) · [Image Generation Guide](https://platform.qianwenai.com/docs/developer-guides/getting-started/image-models) · [Wan2.6-Image API](https://platform.qianwenai.com/docs/api-reference/image-generation/wan26-image-gen-edit/create-task) · [Z-Image-Turbo](https://www.qianwenai.com/models/z-image-turbo)
 
 ---
 
@@ -14,7 +14,7 @@ Generate and edit images using Wan and Qwen-Image models. The Wan series excels 
 
 | Scenario | Recommended Model | Notes |
 |----------|------------------|-------|
-| General creative / realistic photography | `wan2.7-image-pro` / `wan2.7-image` | Multi-function: t2i + editing, thinking mode, 4K (pro). |
+| General creative / realistic photography | `wan2.7-image` / `wan2.7-image-pro` | Recommended default. Multi-function: t2i + editing, thinking mode, 4K (pro). |
 | General creative (dedicated t2i) | `wan2.6-t2i` | Dedicated t2i model, best quality, supports synchronous calls. |
 | Posters / complex text rendering | `qwen-image-2.0-pro` or `wan2.6-t2i` | Strongest Chinese/English text rendering. `qwen-image-2.0-pro-2026-06-22`: supports 1k token instructions, enhanced rendering. |
 | Fast drafts / batch generation | `wan2.2-t2i-flash` | Lowest latency. |
@@ -33,7 +33,7 @@ Generate and edit images using Wan and Qwen-Image models. The Wan series excels 
 
 ## Key Usage
 
-### Synchronous Call (wan2.6, recommended)
+### Synchronous Call (wan2.7, recommended)
 
 Returns the result in a single request. Suitable for most scenarios.
 
@@ -42,7 +42,7 @@ curl -sS 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generat
   -H "Authorization: Bearer $DASHSCOPE_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
-    "model": "wan2.6-t2i",
+    "model": "wan2.7-image",
     "input": {
         "messages": [{"role": "user", "content": [{"text": "A cozy flower shop with wooden door and flowers on display"}]}]
     },
@@ -452,6 +452,42 @@ curl -sS 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generat
 - `n` supports up to 6 (vs wan2.6-image's 4)
 - Does **NOT** support `enable_interleave`
 - `qwen-image-2.0-pro` and `qwen-image-2.0` can also do pure text-to-image (text-only message, no reference images)
+
+### qwen-image-3.0-pro / qwen-image-3.0
+
+**Overview**: The 3.0 series is the latest Qwen-Image generation. It shares the same `messages` payload and sync endpoint as the 2.0/edit models but adds three exclusive parameters (`enable_thinking`, `prompt_extend_mode`) and a smarter resolution behavior (`size` has **no default** — the model auto-recommends resolution from the prompt). `qwen-image-3.0-pro` is the flagship; `qwen-image-3.0` is the general-purpose tier. Both support pure text-to-image and 1–3 reference-image editing.
+
+**Endpoints** (same request body; only the header/URL differ):
+- **Sync**: `POST /api/v1/services/aigc/multimodal-generation/generation` (shared with 2.0 series)
+- **Async**: `POST /api/v1/services/aigc/image-generation/generation` with `X-DashScope-Async: enable`, then poll `GET /api/v1/tasks/{task_id}`
+
+```bash
+curl -sS 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation' \
+  -H "Authorization: Bearer $DASHSCOPE_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "qwen-image-3.0-pro",
+    "input": {
+        "messages": [{"role": "user", "content": [{"text": "A healing-style poster: three puppies playing on lush green grass"}]}]
+    },
+    "parameters": {"prompt_extend": true, "prompt_extend_mode": "agent", "enable_thinking": true}
+  }'
+```
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `enable_thinking` | true | Enhanced reasoning for higher quality; increases latency. **Only effective when `prompt_extend=true`**; applies to Direct T2I, Direct I2I, Agent T2I (I2I Agent mode not supported). Set `false` to reduce generation time. |
+| `prompt_extend_mode` | `direct` | Prompt-rewrite strategy (3.0 only). `direct`=DPE (default, most scenarios); `agent`=APE (finer rewriting, **text-to-image only**). Only takes effect when `prompt_extend=true`. |
+| `prompt_extend` | true | Enable prompt rewriting. When `true`, rewriting follows `prompt_extend_mode`. |
+| `size` | **none** (auto) | `width*height`. Continuous range: total pixels 512×512–2048×2048, aspect ratio 1:8–8:1. **No default — omit it and the model auto-recommends resolution from the prompt.** |
+| `n` | 1 | Output images: 1–6. **Billed per image.** |
+| `negative_prompt` | — | Content to exclude. Max 500 chars. |
+| `watermark` | false | "Qwen-Image" watermark in lower-right corner. |
+| `seed` | random | Reproducibility seed [0, 2147483647]. |
+
+**Prompt length**: recommended ≤ **4500 Token** (the 2.0 series limit is 1300 Token); excess is truncated.
+
+**Response `usage` differences (3.0 only)**: the 3.0 series returns `output_width` / `output_height` (instead of `width` / `height`) and `output_image_count` / `output_image_type` (instead of `image_count`), plus `input_image_count` / `input_image_type`. The `output_image_type` billing tier is `qima_output_1k` (pixel area ≤ 2,250,000) or `qima_output_2k` (> 2,250,000).
 
 ### Text-to-Image Models — Endpoint & Parameters
 

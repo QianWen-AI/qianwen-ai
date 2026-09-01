@@ -23,6 +23,7 @@ from qianwen_lib import (  # noqa: E402
     require_api_key,
     run_update_signal,
     stream_sse,
+    validate_token_plan_model,
 )
 
 
@@ -126,7 +127,7 @@ def main() -> None:
 request JSON fields (--request / --file):
   messages          (required) Array of {role, content} message objects
   model             Model ID — overridden by --model flag
-  enable_thinking   true/false — enable chain-of-thought (default: false)
+  enable_thinking   true/false — enable chain-of-thought (default: let model decide)
   tools             Array of tool/function definitions for function calling
   response_format   {"type":"json_object"} or {"type":"json_schema","json_schema":{...}}
   temperature       Sampling temperature (0-2)
@@ -194,6 +195,7 @@ examples:
         pass
 
     api_key = require_api_key(script_file=__file__)
+    validate_token_plan_model(api_key, request["model"])
     url = chat_url()
 
     try:
@@ -215,9 +217,14 @@ examples:
         print(f"API error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    out_dir = Path(args.output)
+    out = Path(args.output)
+    if out.suffix.lower() == ".json":
+        out_file = out
+        out_dir = out.parent
+    else:
+        out_dir = out
+        out_file = out_dir / "response.json"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / "response.json"
     out_file.write_text(json.dumps(response_data, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Response saved to {out_file}", file=sys.stderr)
 

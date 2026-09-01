@@ -485,7 +485,7 @@ Returns structured JSON with three sections:
   ],
   "token_plan": {
     "subscribed": true,
-    "planName": "Token Plan 团队版（月）",
+    "planName": "Token Plan Team Edition",
     "status": "valid",
     "totalCredits": 25000,
     "remainingCredits": 21000,
@@ -495,10 +495,10 @@ Returns structured JSON with three sections:
   },
   "pay_as_you_go": {
     "models": [
-      { "model_id": "qwen3.6-plus", "usage": { "tokens_total": 480000 }, "cost": 0.38, "currency": "USD" },
-      { "model_id": "qwen-plus", "usage": { "tokens_total": 460000 }, "cost": 0.13, "currency": "USD" }
+      { "model_id": "qwen3.6-plus", "usage": { "tokens_total": 480000 }, "cost": 0.38, "currency": "CNY" },
+      { "model_id": "qwen-plus", "usage": { "tokens_total": 460000 }, "cost": 0.13, "currency": "CNY" }
     ],
-    "total": { "cost": 0.51, "currency": "USD" }
+    "total": { "cost": 0.51, "currency": "CNY" }
   }
 }
 ```
@@ -520,10 +520,10 @@ qwen3.6-plus         850K tokens    1M tokens      85% left
 wan2.6-t2i           38 images      50 images      76% left
 --------------------------------------------------------------------------
 
--- Token Plan  ·  Token Plan Team Edition - Standard Seat  ·  生效中-------
+-- Token Plan  ·  Token Plan Team Edition - Standard Seat  ·  valid-------
 Usage:      25K / 25K Credits
 Quota Left: 100%
-Status:     生效中
+Status:     valid
 Resets:     2026-06-01
 --------------------------------------------------------------------------
 
@@ -613,4 +613,3 @@ The QianWen CLI handles update notifications natively; no additional stderr sign
 - **logout**: Revokes server-side session and clears local credentials (keychain + file). Server-side call is best-effort — local logout always succeeds.
 - **Authentication**: Uses OAuth 2.0 Device Authorization Grant with PKCE. Credentials stored in OS keychain when available, with encrypted file fallback.
 - **breakdown --model is required**: Unlike the previous Python implementation, the CLI requires `--model` for breakdown. To query all models' usage, use `qianwen usage summary` instead.
-- **TTS character billing**: New TTS models (`qwen-audio-3.0-tts-*`, `cosyvoice-v3.5-*`) are billed per **character** rather than per token. In usage breakdown and summary JSON output, these models report a `characters` field instead of `tokens_total`, representing the actual character count consumed. When presenting TTS usage to the user, display the `characters` value with the unit "characters" (字符) — do not convert or equate it to tokens.

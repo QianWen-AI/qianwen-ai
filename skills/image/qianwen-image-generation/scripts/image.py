@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate or edit images using Wan and Qwen Image models via DashScope API.
 
-Supports wan2.6 sync mode (default) and async mode for older models.
+Supports wan2.7 sync mode (default) and async mode for older models.
 wan2.6-image supports image editing (multi-image input) and interleaved
 text-image output. Qwen Image series supports text rendering, image editing,
 and text-to-image with fixed resolutions.
@@ -32,6 +32,7 @@ from qianwen_lib import (  # noqa: E402
     poll_task,
     require_api_key,
     run_update_signal,
+    validate_token_plan_model,
 )
 from image_lib import (  # noqa: E402
     DEFAULT_MODEL,
@@ -85,7 +86,8 @@ def _call_generate_sync(req: dict[str, Any], api_key: str) -> dict[str, Any]:
 
     image_urls = extract_image_urls(resp)
     return {
-        "image_url": image_urls[0], "width": width, "height": height,
+        "image_urls": image_urls, "image_url": image_urls[0],
+        "image_count": len(image_urls), "width": width, "height": height,
         "seed": req.get("seed"),
     }
 
@@ -140,7 +142,8 @@ def _call_generate_async(req: dict[str, Any], api_key: str) -> dict[str, Any]:
 
     image_urls = extract_image_urls(result)
     return {
-        "image_url": image_urls[0], "width": width, "height": height,
+        "image_urls": image_urls, "image_url": image_urls[0],
+        "image_count": len(image_urls), "width": width, "height": height,
         "seed": req.get("seed"),
     }
 
@@ -240,11 +243,10 @@ request JSON fields (--request / --file):
   watermark           true/false — add watermark (default: false)
 
 models (Wan series):
-  wan2.6-t2i          (default) Text-to-image — use for prompt-only generation
+  wan2.7-image        (default) Multi-function — text-to-image, image editing, interleaved output
   wan2.7-image-pro    Multi-function (higher quality) — text-to-image, image editing,
                       multi-image composition, interleaved output
-  wan2.7-image        Multi-function — text-to-image, image editing, multi-image
-                      composition, interleaved output
+  wan2.6-t2i          Text-to-image ONLY — dedicated t2i model, sync + async
   wan2.6-image        Image editing ONLY — requires reference_images or
                       enable_interleave=true. NOT for pure text-to-image!
   wan2.5-i2i-preview  Image editing + multi-image fusion (1-3 ref images, async-only)
@@ -252,6 +254,9 @@ models (Wan series):
   wan2.2-t2i-flash    Fast text-to-image generation
 
 models (Qwen Image series):
+  qwen-image-3.0-pro  Latest flagship — fused generation + multi-image
+                      editing (1-3 ref, 1-6 output), strong text rendering
+  qwen-image-3.0      Latest generation — general-purpose text-to-image + editing
   qwen-image-2.0-pro  Fused generation + editing — text rendering, multi-image
                       (1-3 ref, 1-6 output)
   qwen-image-2.0      Accelerated generation + editing
@@ -319,7 +324,7 @@ examples:
     parser.add_argument("--request", help="Inline JSON: must contain 'prompt'")
     parser.add_argument("--file", help="Path to JSON file containing request body")
     parser.add_argument("--model", default=None,
-                        help="Model name (overrides value in request file; default: wan2.6-t2i)")
+                        help="Model name (overrides value in request file; default: wan2.7-image)")
     parser.add_argument(
         "--async", dest="async_mode", action="store_true",
         help="Use async mode (auto-enabled for wan2.5-i2i, qwen-image-plus/max, and interleaved output)",
@@ -341,6 +346,7 @@ examples:
         req["model"] = DEFAULT_MODEL
 
     model = req["model"]
+    validate_token_plan_model(api_key, model)
     is_edit = is_image_edit_model(model)
     is_i2i = is_i2i_model(model)
     is_qwen_t2i = is_qwen_t2i_model(model)
@@ -404,14 +410,30 @@ examples:
         download_file(image_urls[0], output_path)
         result["local_path"] = str(output_path)
     elif len(image_urls) > 1:
-        out_dir = output_path if output_path.suffix == "" else output_path.parent
-        out_dir.mkdir(parents=True, exist_ok=True)
         local_paths: list[str] = []
-        for i, url in enumerate(image_urls):
-            dest = out_dir / f"output_{i + 1}.png"
-            download_file(url, dest)
-            local_paths.append(str(dest))
-            print(f"Saved image {i + 1}/{len(image_urls)}: {dest}", file=sys.stderr)
+        if output_path.suffix != "":
+            # output is a filename: derive sequential names <stem>-1<suffix>, <stem>-2<suffix>...
+            out_dir = output_path.parent
+            out_dir.mkdir(parents=True, exist_ok=True)
+            stem = output_path.stem
+            suffix = output_path.suffix
+            for i, url in enumerate(image_urls):
+                dest = out_dir / f"{stem}-{i + 1}{suffix}"
+                download_file(url, dest)
+                local_paths.append(str(dest))
+        else:
+            # output is a directory: keep existing behavior (mkdir + URL basename)
+            out_dir = output_path
+            out_dir.mkdir(parents=True, exist_ok=True)
+            for i, url in enumerate(image_urls):
+                url_basename = Path(urlparse(url).path).name
+                if url_basename and "." in url_basename:
+                    dest = out_dir / url_basename
+                else:
+                    dest = out_dir / f"output_{i + 1}.png"
+                download_file(url, dest)
+                local_paths.append(str(dest))
+        print(f"Saved {len(local_paths)} images: {', '.join(local_paths)}", file=sys.stderr)
         result["local_paths"] = local_paths
         result["local_path"] = local_paths[0]
 
@@ -426,7 +448,11 @@ examples:
                 md_lines.append(item["text"])
             elif item["type"] == "image":
                 img_idx += 1
-                md_lines.append(f"\n![Image {img_idx}](output_{img_idx}.png)\n")
+                img_url = item["image"]
+                img_basename = Path(urlparse(img_url).path).name
+                if not img_basename or "." not in img_basename:
+                    img_basename = f"output_{img_idx}.png"
+                md_lines.append(f"\n![Image {img_idx}]({img_basename})\n")
         md_path.write_text("\n".join(md_lines), encoding="utf-8")
         print(f"Saved interleaved content: {md_path}", file=sys.stderr)
 

@@ -59,7 +59,7 @@ python3 scripts/video.py \
 Output (stdout): `task_id`. Stderr shows mode and model:
 
 ```
-Mode: t2v | Model: wan2.6-t2v
+Mode: t2v | Model: happyhorse-1.1-t2v
 Task submitted: abc-1234-5678
 ```
 

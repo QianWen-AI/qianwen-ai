@@ -27,12 +27,12 @@ curl -sS -X POST "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-gene
   -H "Content-Type: application/json" \
   -H "X-DashScope-Async: enable" \
   -d '{
-    "model": "wan2.6-t2v",
+    "model": "happyhorse-1.1-t2v",
     "input": {
       "prompt": "A detective walking through a rainy city at night"
     },
     "parameters": {
-      "size": "1280*720",
+      "resolution": "720P",
       "duration": 5
     }
   }'
@@ -64,12 +64,12 @@ curl -sS -X POST "https://dashscope.aliyuncs.com/api/v1/services/aigc/image2vide
 
 i2v:
 ```json
-{"model":"wan2.6-i2v-flash","input":{"prompt":"A cat running on grass","img_url":"https://img.alicdn.com/imgextra/i1/NotRealJustExample/frame.png"},"parameters":{"resolution":"720P","duration":5}}
+{"model":"happyhorse-1.1-i2v","input":{"media":[{"type":"first_frame","url":"https://img.alicdn.com/imgextra/i1/NotRealJustExample/frame.png"}],"prompt":"A cat running on grass"},"parameters":{"resolution":"720P","duration":5}}
 ```
 
 r2v:
 ```json
-{"model":"wan2.6-r2v-flash","input":{"prompt":"character1 greets character2","reference_urls":["https://img.alicdn.com/imgextra/i1/NotRealJustExample/person1.png","https://img.alicdn.com/imgextra/i1/NotRealJustExample/person2.png"]},"parameters":{"size":"1280*720","duration":5,"shot_type":"multi"}}
+{"model":"happyhorse-1.1-r2v","input":{"prompt":"character1 greets character2","media":[{"type":"reference_image","url":"https://img.alicdn.com/imgextra/i1/NotRealJustExample/person1.png"},{"type":"reference_image","url":"https://img.alicdn.com/imgextra/i1/NotRealJustExample/person2.png"}]},"parameters":{"resolution":"720P","duration":5}}
 ```
 
 vace (image_reference):

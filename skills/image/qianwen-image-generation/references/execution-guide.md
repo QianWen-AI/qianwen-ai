@@ -24,7 +24,7 @@ curl -sS -X POST "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal
   -H "Authorization: Bearer $DASHSCOPE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "wan2.6-t2i",
+    "model": "wan2.7-image",
     "input": {
       "messages": [{"role": "user", "content": [{"text": "A cozy flower shop with wooden door"}]}]
     },

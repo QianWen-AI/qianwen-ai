@@ -35,6 +35,7 @@ from qianwen_lib import (  # noqa: E402,F401
     stream_sse,
     try_parse_json,
     upload_local_file,
+    validate_token_plan_model,
 )
 
 # ---------------------------------------------------------------------------
@@ -42,12 +43,7 @@ from qianwen_lib import (  # noqa: E402,F401
 # ---------------------------------------------------------------------------
 
 def require_api_key() -> str:
-    """Load API key with Vision domain tagging.
-
-    Token Plan keys (``sk-sp-...``) are rejected by the base layer with
-    ``sys.exit(1)``; this wrapper simply injects ``domain="Vision"`` so the
-    base-layer error message names the correct sub-skill.
-    """
+    """Load API key with Vision domain tagging."""
     return _require_api_key_base(script_file=__file__, domain="Vision")
 
 # ---------------------------------------------------------------------------

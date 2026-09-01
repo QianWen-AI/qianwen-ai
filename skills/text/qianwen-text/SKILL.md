@@ -4,9 +4,6 @@ description: "Generate text, have conversations, write code, reason, and call fu
 compatibility: "Requires Python 3.9+ and curl. Cursor: auto-loaded. Claude Code: read this skill's SKILL.md before first use."
 ---
 
-> **Agent setup**: If your agent doesn't auto-load skills (e.g. Claude Code),
-> see [agent-compatibility.md](references/agent-compatibility.md) once per session.
-
 # Qwen Text Chat (OpenAI-Compatible)
 
 Generate text, conduct conversations, write code, and invoke tools using Qwen models through the OpenAI-compatible API.
@@ -24,7 +21,6 @@ need details.
 | `references/api-guide.md`           | API supplement and full code examples                                               |
 | `references/prompt-guide.md`        | Prompt engineering: CO-STAR framework, CoT, few-shot, task steps                    |
 | `references/sources.md`             | Official documentation URLs (manual lookup only)                                    |
-| `references/agent-compatibility.md` | Agent self-check: register skills in project config for agents that don't auto-load |
 
 ## Security
 
@@ -37,27 +33,46 @@ files that may contain secrets.
 
 ## Key Compatibility
 
-> [!CAUTION]
-> **Token Plan keys (`sk-sp-...`) are NOT supported by this skill — using them is strictly forbidden.**
+Both PAYG (`sk-ws-...`; legacy `sk-...`) and Token Plan (`sk-sp-...`) keys are supported. Detect
+the API key type without exposing the Key:
 
-Scripts require a **standard QianWen API key** (`sk-...`, pay-as-you-go). The script detects
-`sk-sp-` keys at startup and **hard-fails with `exit 1`** before any HTTP request is sent. See
-`qianwen-ops-auth/references/tokenplan.md` for details.
+```bash
+python3 -c "
+import sys; sys.path.insert(0, 'scripts')
+from qianwen_lib import detect_api_key_type
+print(detect_api_key_type('scripts/qianwen_lib.py'))
+"
+```
+
+| Output | Meaning |
+|--------|---------|
+| `token-plan` | Token Plan key — use only models from the Token Plan list below. |
+| `payg` | Pay-as-you-go key — full model catalog available. |
+| `not-set` | No key configured. |
+
+For Token Plan, use an exact model from qianwen-model-selector, or consult
+`qianwen-ops-auth/references/tokenplan.md`. If unavailable, use:
+- Personal: https://platform.qianwenai.com/docs/token-plan/personal/token-plan-personal-overview.md
+- Team: https://platform.qianwenai.com/docs/token-plan/team/token-plan-team-overview.md
+
+Token Plan supports only specific models — use exactly a model from the references above; do not
+guess or probe model availability. For PAYG, continue below.
 
 ## Model Selection
 
 | Model              | Use Case                                                                |
 |--------------------|-------------------------------------------------------------------------|
-| `qwen3.8-max`      | Strongest flagship — 24T MoE, native vision-language, hybrid thinking (on by default), 1M context, built-in tools. Best for complex reasoning & coding. |
+| `qwen3.8-max`      | Strongest flagship — 2.4T MoE, native vision-language, hybrid thinking (on by default), 1M context, built-in tools. Best for complex reasoning & coding. |
+| `qwen3.8-flash`    | Fast Qwen3.8 — multimodal (text+image+video), hybrid thinking (on by default), 1M context. Fast, cost-effective. |
 | `qwen3.7-max`      | Flagship agent model — 1M context, thinking mode, function calling, built-in tools, structured output. |
 | `qwen3.7-plus`     | **Recommended default** — multimodal vision-language, enhanced Agent execution & coding, 1M context, thinking on by default. |
-| `qwen3.7-flash`    | Next-gen lightweight — 1M context, full features at lower cost. |
+| `qwen3.7-flash`    | Next-gen lightweight — multimodal (text+image+video), 1M context, full features at lower cost. |
 | `qwen3.6-plus`     | Multimodal (text+image+video), 1M context, thinking on by default, strong coding & universal recognition |
 | `qwen3.5-plus`     | Balanced performance, cost, speed, 1M context, thinking on by default   |
 | `qwen3.5-flash`    | Fast, low-cost, 1M context                                              |
 | `qwen3-max`        | Legacy strongest capability, built-in tools (web search, code interpreter) |
 | `qwen-plus`        | General purpose                                                         |
-| `qwen-turbo`       | Cheapest, low latency                                                   |
+| `qwen-turbo`       | Cheap, low latency                                                   |
 | `qwen3-coder-next` | **Recommended code model** — best balance of quality, speed, cost; agentic coding |
 | `qwen3-coder-plus` | Code generation — highest quality for complex tasks                     |
 | `qwen3-coder-flash`| Code generation — fast responses, lower cost                            |
@@ -65,7 +80,6 @@ Scripts require a **standard QianWen API key** (`sk-...`, pay-as-you-go). The sc
 | `qwen-mt-plus`     | Machine translation — best quality, 92 languages                        |
 | `qwen-mt-flash`    | Machine translation — fast, low cost, 92 languages                      |
 | `qwen-mt-lite`     | Machine translation — real-time chat, fastest, 31 languages             |
-| `qwen-plus-character-ja` | Role-playing, Japanese                                          |
 | `qwen-plus-character`    | Role-playing — character restoration, empathetic dialog             |
 | `qwen-flash-character`   | Role-playing — fast, lower cost                                    |
 
@@ -87,12 +101,9 @@ Scripts require a **standard QianWen API key** (`sk-...`, pay-as-you-go). The sc
 
 ### Prerequisites
 
-- **API Key**: Check that `DASHSCOPE_API_KEY` (or `QIANWEN_API_KEY`) is set using a **non-plaintext** check only (e.g. in shell:
-  `[ -n "$DASHSCOPE_API_KEY" ]`; report only "set" or "not set", never the key value). If not set: run the *
-  *qianwen-ops-auth** skill if available; otherwise guide the user to obtain a key from [QianWen Console](https://platform.qianwenai.com/home/api-keys) and set it via `.env` file
-  (`echo 'DASHSCOPE_API_KEY=sk-your-key-here' >> .env` in project root or current directory) or environment variable.
-  The script searches for `.env` in the current working directory and the project root. Skills may be installed independently — do
-  not assume qianwen-ops-auth is present.
+- **API Key**: Use the non-plaintext detector in **Key Compatibility**; do not replace it with a
+  variable-presence check. If no Key is found, use qianwen-ops-auth when available or guide the user
+  to configure `DASHSCOPE_API_KEY`/`QIANWEN_API_KEY` in `.env`. Skills may be installed independently.
 - Python 3.9+ (stdlib only, **no pip install needed** for script execution)
 
 ### Environment Check
@@ -136,7 +147,7 @@ python3 <this-skill-dir>/scripts/text.py \
 | `--request '{...}'` | JSON request body                                   |
 | `--file path.json`  | Load request from file (alternative to `--request`) |
 | `--stream`          | Enable streaming output                             |
-| `--output dir/`     | Save response JSON to directory                     |
+| `--output path`     | Save response JSON to path (file if `.json` suffix, otherwise directory); use distinct filenames across calls to avoid overwriting |
 | `--print-response`  | Print response to stdout                            |
 | `--model ID`        | Override model (also settable in request JSON)      |
 
@@ -187,7 +198,7 @@ in [execution-guide.md](references/execution-guide.md).
 | `max_tokens`          | int             | Max output tokens                                                                                    |
 | `tools`               | array           | Function definitions for tool calling                                                                |
 | `stream`              | bool            | Enable streaming (recommended for interactive use)                                                   |
-| `enable_thinking`     | bool            | Enable thinking mode. **Model defaults apply**: `qwen3.8-max`/`qwen3.7-max`/`qwen3.7-plus`/`qwen3.7-flash`/`qwen3.6-plus`/`qwen3.5-plus`/`qwen3.5-flash` have thinking **ON by default**. Only set explicitly when user requests deep thinking or needs to disable for flash models. Adds latency for real-time tasks. |
+| `enable_thinking`     | bool            | Enable thinking mode. **Model defaults apply**: `qwen3.8-max`/`qwen3.8-flash`/`qwen3.7-max`/`qwen3.7-plus`/`qwen3.7-flash`/`qwen3.6-plus`/`qwen3.6-flash`/`qwen3.5-plus`/`qwen3.5-flash` have thinking **ON by default**. Only set explicitly when user requests deep thinking or needs to disable for flash models. Adds latency for real-time tasks. |
 
 ### Response Fields
 
@@ -209,7 +220,7 @@ These are API-level features supported through request parameters. All use the s
 | **Deep thinking**     | `enable_thinking: true`                                          | Extended reasoning; only when user requests it |
 | **Function calling**  | `tools: [...]`                                                   | Define functions for tool use                  |
 | **Context cache**     | Automatic for repeated prefixes; or explicit session-based       | Reduces cost for repeated context              |
-| **Partial mode**      | `partial_mode: "prefix"`                                         | Continue/complete a prefix                     |
+| **Partial mode**      | Last message: `{"role": "assistant", "content": "prefix…", "partial": true}` | Continue/complete a prefix                     |
 | **Batch inference**   | Async batch API with JSONL input                                 | 50% cost discount                              |
 
 For detailed usage of each feature, see [api-guide.md](references/api-guide.md) and [sources.md](references/sources.md).

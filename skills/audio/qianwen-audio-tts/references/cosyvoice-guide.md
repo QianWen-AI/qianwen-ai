@@ -1,6 +1,6 @@
 # CosyVoice TTS Guide
 
-CosyVoice models use **WebSocket API** (real-time) or **HTTP NRT API** (non-real-time), requiring the DashScope SDK.
+CosyVoice models use **WebSocket API** (real-time) or **HTTP NRT API** (non-real-time). The bundled script calls the PAYG HTTP NRT API directly and uses the DashScope SDK for WebSocket requests.
 
 ## Models
 
@@ -41,7 +41,7 @@ CosyVoice models use **WebSocket API** (real-time) or **HTTP NRT API** (non-real
   ```
 - **API Key**: Same as Qwen TTS (`DASHSCOPE_API_KEY` or `QIANWEN_API_KEY`)
 
-> **SDK version**: CosyVoice v3.5 and Qwen-Audio-TTS NRT API require `dashscope>=1.25.17`. The WebSocket real-time API requires `dashscope>=1.24.6`.
+> **SDK version**: The bundled script requires `dashscope>=1.25.17` for its WebSocket path. PAYG HTTP NRT requests use the public HTTP API directly.
 
 ## Run Script
 
@@ -58,7 +58,7 @@ python3 scripts/tts_cosyvoice.py --text "Hello, world!"
 | `--voice`, `-v` | Voice ID (default: `longanyang`) |
 | `--output`, `-o` | Output file (default: `output/qianwen-audio-tts/cosyvoice.mp3`) |
 | `--format`, `-f` | Audio format: mp3, wav, pcm (default: mp3) |
-| `--instruction` | Free-style instruction for speech control (v3.5 and Qwen-Audio-TTS models) |
+| `--instruction` | Free-style instruction for speech control (v3.5 and v3-flash) |
 | `--language-hints` | Target language hint (e.g. `zh`, `en`) |
 
 ## Available Voices
@@ -88,10 +88,6 @@ python3 scripts/tts_cosyvoice.py -t "Professional narration" -m cosyvoice-v3.5-p
 # With instruction control (v3.5 + custom voice)
 python3 scripts/tts_cosyvoice.py -t "欢迎光临我们的店铺" -m cosyvoice-v3.5-flash -v <id> --instruction "用热情洋溢的声音，语速稍快"
 
-# Qwen-Audio-TTS models
-python3 scripts/tts_cosyvoice.py -t "你好" -m qwen-audio-3.0-tts-plus -v longanlingxin
-python3 scripts/tts_cosyvoice.py -t "你好" -m qwen-audio-3.0-tts-flash -v longanhuan_v3.6
-
 # Legacy v3 models still supported
 python3 scripts/tts_cosyvoice.py -t "Hello" -m cosyvoice-v3-plus
 
@@ -101,6 +97,8 @@ python3 scripts/tts_cosyvoice.py -t "Second sentence" -o output/qianwen-audio-tt
 ```
 
 > **Tip**: Default output overwrites previous file. Use `-o` with different filenames for batch tasks.
+
+> **Note**: Qwen-Audio-TTS models (`qwen-audio-3.0-tts-plus` / `qwen-audio-3.0-tts-flash`) are handled by `scripts/tts.py` — see `SKILL.md` or `api-guide.md` for usage.
 
 ## Error Handling
 

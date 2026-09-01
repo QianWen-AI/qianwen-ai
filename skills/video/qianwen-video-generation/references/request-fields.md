@@ -46,6 +46,24 @@ Detailed field tables for each video generation mode. The Mode Selection Guide a
 | `shot_type` | string | No | `"multi"` (recommended) or `"single"` |
 | `audio` | bool | No | `true` for audio (default). `false` for silent (wan2.6-r2v-flash). wan2.6-r2v always outputs audio. |
 
+> **wan2.7-r2v** uses a different payload: `input.media=[{type,url}]` with up to 5 **mixed**
+> references (`type` ∈ `reference_image`/`reference_video`/`reference_audio`), plus
+> `resolution` (720P/1080P) + `duration` (≤10s) + `prompt_extend` + `watermark` (no `ratio`).
+> `reference_urls=[...]` is still accepted (bare strings become `reference_image`). See
+> [api-guide.md](api-guide.md) for verified examples. **PAYG-only.**
+
+## wan3.0-video / wan3.0-video-prime (All-in-One t2v + i2v)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `prompt` | string | Yes | Text description |
+| `img_url` / `reference_image` / `media` | string/array | No | Presence → **i2v** (`input.media=[{type:reference_image,url}]`); absence → **t2v** |
+| `resolution` | string | No | `"480P"` / `"720P"` / `"1080P"` (default) |
+| `ratio` | string | No | `adaptive` / `16:9` / `9:16` / `1:1` |
+| `duration` | int | No | ≤30 seconds |
+
+> **PAYG-only** — not available on Token Plan. Under Token Plan, pass references as URLs only.
+
 ## vace (Video Editing)
 
 | Field | Type | Required | Description |
