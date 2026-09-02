@@ -72,9 +72,14 @@ __pycache__/
 output/
 tmp/
 
+### Runtime logs ###
+logs/
+
 ### ETC ###
 docs
 ref
 *copilot*
 cache
 target
+### 免费额度缓存 ###
+backend/data/
