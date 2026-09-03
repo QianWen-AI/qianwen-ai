@@ -130,7 +130,7 @@ Tell your agent what you need — it writes the code, picks the right QianWen mo
 | `qianwen-model-selector` | Recommends the right model for your use case |
 | `qianwen-ops-auth` | API key and authentication management |
 | `qianwen-usage` | Usage queries, free tier checks, subscriptions, billing |
-| `qianwen-payment` | Payment center — account balance, recharge entry (opens official page only), spending limit (read-only) |
+| `qianwen-payment` | Payment center — account balance, account balance recharge, recharge guidance |
 | `qianwen-find-skills` | Discover, compare, and install QianWen Agent Skills for a task |
 
 ---

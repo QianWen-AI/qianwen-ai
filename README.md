@@ -130,7 +130,7 @@ npx skills add QianWen-AI/qianwen-ai
 | `qianwen-model-selector` | 根据场景推荐最合适的模型 |
 | `qianwen-ops-auth` | API Key 与认证管理 |
 | `qianwen-usage` | 用量查询、免费额度查看、订阅查询、账单与计费查询 |
-| `qianwen-payment` | 支付中心——账户余额查看、充值入口（仅打开官方页面）、消费限额查看（只读） |
+| `qianwen-payment` | 支付中心——账户余额查看、账户充值、欠费充值引导 |
 | `qianwen-find-skills` | 根据任务发现、比较并安装 QianWen Agent Skills |
 
 ---

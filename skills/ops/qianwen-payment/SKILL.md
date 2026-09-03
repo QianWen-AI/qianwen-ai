@@ -1,167 +1,175 @@
 ---
 name: qianwen-payment
-description: "Payment center for account funds. Use for: check account balance, recharge / top-up entry. Skip for: usage/billing queries (use qianwen-usage), model tasks."
+description: "QianWenAI cash balance query and fixed-amount Alipay recharge orchestration. Owns the outer recharge lifecycle while delegating the payment-side step to `alipay-payment-skill` when selected. Covers balance, recharge orders, order results, recharge history, missing current-order QR recovery, Token Plan redirects, and recharge page guidance. TRIGGER when: explicit QianWenAI balance query, confirmed recharge request with amount, model-call error explicitly reporting insufficient QianWenAI balance or account overdue, recharge result/history query, the user reports that the current QianWenAI recharge QR was not displayed, Token Plan purchase redirect, user wants guidance for the QianWenAI recharge page, or user explicitly invokes this skill by name (e.g. use qianwen-payment). DO NOT TRIGGER when: usage/billing/subscription queries (use qianwen-usage), incoming Alipay payment links or unrelated merchant orders (use alipay-payment-skill), refunds, non-QianWenAI products."
 ---
 
 # QianWen Payment
 
-Check account balance and open the official recharge page via the QianWen CLI.
+QianWenAI (千问AI平台) cash balance query and fixed-amount Alipay recharge. Use this Skill only for a QianWenAI account. Do not infer recharge intent or an overdue account from a low balance, a generic quota error, HTTP status, or unrelated model failure.
 
-## Security Boundary
+## Compatibility and resources
 
-> [!CAUTION]
-> This skill NEVER completes any fund operation inside the conversation. Recharge is only completed by the user on the official page opened by the CLI.
->
-> **Before running `qianwen billing balance recharge`**, you MUST, in order:
-> 1. Show the user their current balance (`qianwen billing balance summary --format json`)
-> 2. Explain that the recharge command will **attempt to open the official recharge page in the browser, and will return a link to that page**
-> 3. Obtain the user's explicit confirmation (report result status as `confirmation_required` until confirmed)
->
-> The command attempts to open the browser the moment it runs — asking after execution is too late. (In sandboxed/headless hosts the browser may not open; the returned `rechargeUrl` is the reliable fallback — see Recharge entry below.)
+Requires Node 18.18+ for every route in this Skill. Use `scripts/preflight.mjs` to enforce the runtime baseline, determine QianWen CLI compatibility, and select the available Alipay payment path; do not reproduce or override its version and capability decisions in prose.
 
-**NEVER:**
+| Location | Authoritative responsibility |
+| --- | --- |
+| `scripts/preflight.mjs` | Route dependency probe, amount normalization, and transaction-critical response validation |
+| `scripts/recharge-result-contract.mjs` | Recharge-result identity and status classification |
+| `scripts/poll-recharge.mjs` | Foreground post-payment result polling |
+| `references/recharge-flow.md` | Confirmed-order business sequence, branching, stop and recovery |
+| `references/cli-contracts.md` | Commands, arguments, JSON shapes, script interfaces and exit codes |
+| `references/sources.md` | Manual provenance lookup only |
 
-- ❌ Run `qianwen billing balance recharge` before the user explicitly confirms — NEVER execute first and ask afterwards
-- ❌ Perform, simulate, or promise any payment, transfer, or fund operation in the conversation
-- ❌ Judge that the balance is "insufficient" or proactively suggest recharging — only display the balance as-is
-- ❌ Construct, guess, or rewrite any recharge URL — only use the `rechargeUrl` returned by the CLI
+Load references only when the current route needs their authoritative detail. For fixed-amount recharge, read `recharge-flow.md` only after the user confirms order creation. Also read its recovery section when the user explicitly reports that the current order's QR was not displayed and the current order's Alipay materials are still retained.
 
-## Prerequisites
+## Routes
 
-- **QianWen CLI >= 1.3.0** is required. Verify with:
+| Request | Route | Business boundary |
+| --- | --- | --- |
+| Balance | `balance-summary` | Read-only |
+| Confirmed overdue or explicit model-call balance error | Ask whether to recharge | Does not authorize an amount or transaction |
+| Fixed-amount Alipay recharge | `recharge-order` | One create confirmation per attempt, then payment and conditional foreground result polling |
+| Current-order QR not displayed | `missing-qr-recovery` | User-triggered presentation recovery from retained Alipay materials; no command or new order |
+| Existing-order result | `recharge-result` | One read-only snapshot; never starts a polling loop |
+| Recharge history | `recharge-history` | Read-only, default 30 days |
+| Recharge page guidance | `recharge-page` | Confirm before opening the browser |
+| Token Plan purchase | None | Redirect to the Token Plan page listed in `sources.md` |
 
-```bash
-qianwen version
-```
+## Core rules
 
-If the installed version is below 1.3.0, do NOT call the missing billing commands. Explain that the payment commands require CLI >= 1.3.0 and wait for the user to confirm the upgrade before proceeding.
+1. **Localize only QianWen-owned output.** Follow the language of the user's latest substantive message. The AI risk notice may be translated in full. Only user-facing Alipay content is passed through verbatim; route-specific control data is never user-facing.
+2. **One confirmation, one create attempt.** Confirm the exact masked account, normalized amount, Alipay method, and operation scope. A confirmation authorizes exactly one invocation of the create command and is consumed before that invocation. It cannot authorize another order, including in the same conversation with the same account and amount or for a retry, replacement, or additional order. A status query, QR recovery, payment continuation, or statement that payment was completed never authorizes creation. Never automatically retry an interrupted, malformed, timed-out, nonzero, or otherwise unconfirmed create attempt.
+3. **One payment owner within an outer recharge lifecycle.** This Skill owns order creation, payment handoff, and the decision to query the QianWen result. Preflight selects `direct` or `alipay-payment-skill` before order creation. `alipay-payment-skill` owns safety, commands, retries, output, and stop decisions only within the delegated payment-side step. Never switch paths after a direct Alipay command has started because its side effects may be unknown.
+4. **No payment improvisation.** Use only the unchanged, validated `paymentUrl` from the current create response. Never accept, rewrite, reconstruct, normalize, decode/re-encode, or substitute a link from the user, history, logs, or another order.
+5. **One proof of credit.** Only the shared recharge-result classifier returning `category=credited` proves the recharge was credited. An Alipay result, QR scan, user statement, balance change, or history entry does not.
+6. **Protect credentials and transaction data.** Never request an Alipay password, bank-card number, SMS code, API key, cookie, or pasted token. Keep full account identifiers, order IDs, payment links, and raw payloads only in current-flow memory. Do not copy them to files, logs, long-term memory, or sub-agent messages.
+7. **Deliver before polling.** Complete Progress node 2 before any result query or `poll-recharge.mjs`. A command result visible only to the Agent, file read, preview, draft, or planned final reply is not delivery.
+8. **Polling route.** Use [recharge-flow.md](references/recharge-flow.md) for polling eligibility and business sequencing.
+9. **Consistent execution context.** Apply the execution-context and authentication-recovery contract in [cli-contracts.md](references/cli-contracts.md) to QianWen commands.
 
-If not installed, run:
+## Direct-path sessionId resolution
 
-```bash
-npm install -g @qianwenai/qianwen-cli
-```
+This section applies only to the direct path. The delegated path follows `alipay-payment-skill`. `sessionId` is optional and applies only to `alipay-bot submit-payment`; `trigger-payment-signal` never receives it. Use the first non-empty value from this order:
 
-Node.js >= 18 required.
+| Priority | Source |
+| --- | --- |
+| 1 | Runtime metadata: `sessionId` / `session_id` |
+| 2 | Current conversation: `threadId` / `thread_id` / `conversationId` / `conversation_id` / `agentContextId`; for Codex: `CODEX_THREAD_ID` |
+| 3 | Environment variable `AIPAY_SESSION_ID` |
 
-### Authentication
+Use the value as-is. Do not generate one, ask the user for one, or substitute another business ID. If all sources are empty, omit `--session-id`.
 
-This skill authenticates through the CLI login session (OAuth device flow). It does NOT need — and MUST NOT be given — any API key configuration.
+## Pre-confirmation fast path
 
-TL;DR — 3-step auth path:
+### 1. Amount
 
-1. `qianwen auth status --format json` → `authenticated: true` → skip to commands
-2. `qianwen auth login --init-only --format json` → extract `verification_url` → open in browser
-3. `qianwen auth login --complete --format json` → poll until `success` event
+Use only the amount intentionally supplied for the current recharge.
 
-For the full authentication flow (event structure, non-TTY handling, pitfalls), see the **qianwen-usage** skill.
+- Convert yuan, jiao/mao, and fen exactly with decimal-string or integer arithmetic.
+- Continue only when the amount is unambiguous, positive, denominated in CNY, and exactly representable in cents.
+- Ask for one exact amount when it is missing, approximate, a range, contains multiple candidates, uses another currency, or has sub-cent precision.
+- Never guess, round, truncate, or reuse an amount from another request.
 
-## Commands
-
-All commands must be run with an explicit `--format json` and their JSON output parsed.
-
-### Check balance
-
-**`qianwen billing balance summary`** — Show available account balance
-
-```bash
-qianwen billing balance summary --format json
-```
-
-JSON structure:
-
-```json
-{
-  "availableAmount": "1234.56",
-  "currency": "CNY"
-}
-```
-
-Present the balance to the user as a formatted amount with its currency (e.g. `¥1,234.56` for CNY) — this mirrors the CLI's own `displayAmount` rendering in table/text mode. Do not show the raw JSON.
-
-### Recharge entry (confirmation required)
-
-**`qianwen billing balance recharge`** — Open the official recharge page in the browser
-
-Only run this AFTER completing the Security Boundary confirmation steps above.
+Validate the normalized amount together with route dependencies:
 
 ```bash
-qianwen billing balance recharge --format json
+node <skill-dir>/scripts/preflight.mjs --route recharge-order --amount <normalized>
 ```
 
-JSON structure:
+For every `recharge-order` attempt, the compatible Alipay CLI and `alipay-payment-skill` are independent blocking dependencies. Preflight validates the CLI contract; separately verify that `alipay-payment-skill` is present and loadable in the host's available-Skill registry. Neither dependency substitutes for the other, even when preflight selects `payment_path=direct`. Complete both checks before authentication, confirmation, or order creation.
 
-```json
-{
-  "rechargeUrl": "https://platform.qianwenai.com/home/billing/overview?target=recharge",
-  "opened": true,
-  "message": "Recharge page opened in browser"
-}
+After both dependency gates pass, retain the returned `payment_path`. `direct` means the optional pre-handoff signal capability is available; `alipay-payment-skill` means payment submission must use the already-verified `alipay-payment-skill`. If either dependency is unavailable, stop and use [cli-contracts.md § Dependency setup](references/cli-contracts.md) only when installation guidance is needed.
+
+### 2. Authentication and account snapshot
+
+Verify a server-authenticated QianWen CLI account using the authentication contract in [cli-contracts.md](references/cli-contracts.md). Use only the CLI OAuth device flow; show only its returned verification URL and never ask for credentials or tokens.
+
+Retain the full account identifier only for current-flow consistency checks and show only its masked form. Immediately before creation, re-read the authenticated account and compare it with the confirmed snapshot. Any account, amount, currency, payment-method, or operation-scope change invalidates the confirmation.
+
+Do not query balance, recharge history, or prior orders before creation. They add latency without protecting this transaction.
+
+### 3. Confirmation
+
+For every fresh fixed-amount create confirmation, the first visible line must be this complete AI risk notice, localized when appropriate:
+
+```text
+AI risk notice: This recharge request was prepared by AI and may not reflect your actual intent. Review the amount, account, and operation scope; do not confirm if anything is incorrect.
 ```
 
-**Always surface `rechargeUrl` to the user — regardless of `opened`.** The `opened` flag reflects whether the CLI's browser-launch command returned successfully, but a successful launch does not guarantee a browser window actually appeared. In sandboxed or headless hosts (e.g. the **Codex desktop app**, remote containers, CI) the browser often cannot open even when `opened` is reported as `true`. So never rely on `opened` alone to decide whether to give the user the link.
+Then show the masked account, normalized amount, Alipay method, and that confirmation creates one recharge order and enters the payment flow. End with a natural confirmation question. Do not use a mechanical Confirm/Cancel option list.
 
-Parse `opened`, but present the link in both cases:
+- Affirmative: recheck the account and normalized amount, consume the confirmation, then read and execute [recharge-flow.md](references/recharge-flow.md).
+- Negative: run nothing and output the localized equivalent of `Recharge canceled`.
+- Material change: show a new confirmation block with the risk notice.
 
-- `true` → tell the user the official recharge page has been opened in their browser, **and still include the `rechargeUrl`** with a note like "if it didn't open automatically, use this link".
-- `false` → tell the user the browser could not be opened automatically, and show the `rechargeUrl` so they can open it manually.
+## User-visible progress
 
-In every case, show the `rechargeUrl` exactly as returned by the CLI (never construct or rewrite it). The recharge itself happens entirely on that official page; this skill's job ends once the entry — including the copyable link — is presented.
+Communicate only these business transitions. Do not expose CLI commands, arguments, skill routing, validators, service names, polling internals, `sessionId`, the internal polling deadline, or raw QianWen-side errors unless the user explicitly asks for troubleshooting information.
 
-## Output and Agent Display Rules
+### Progress node 1: order creation
 
-**JSON is the primary output mode for agents** — always pass `--format json` explicitly, parse the structured response, then present a human-readable summary to the user.
+After confirmation and before invoking the create command:
 
-**When using `--format json` (recommended for agents):**
+```text
+Creating the recharge order…
+```
 
-1. **Parse the JSON** and extract the relevant data for the user's question
-2. **Present a human-readable summary** — do not dump raw JSON to the user
-3. **Add analysis AFTER the summary** — clearly separated with `---`
+### Progress node 2: Alipay output delivered
 
-**When using `--format text`:**
+- **Direct path:** use only the user-facing stdout identified by [cli-contracts.md § Direct Alipay commands](references/cli-contracts.md). Deliver it exactly once and directly as the user-facing response. Render its Markdown normally; do not add a preface, heading, fenced code block, or status summary. Preserve all non-media text byte-for-byte; do not translate, summarize, wrap, or filter its business content. Apply only this transport adaptation:
+  - If stdout contains `MEDIA: <path-or-url>` lines, extract every reference and remove only those lines from the text. Send the remaining text unchanged, then send the referenced images in their original order through the image/media channel.
+  - If no image/media channel is available, append the references as Markdown images to the single text response in their original order.
+  - If stdout already contains Markdown images, preserve them unchanged and do not send duplicate images. Never open, analyze, or modify a referenced image. Do not reuse it except to re-present the retained QR from the current order when the user reports that it was not displayed.
+- **Alipay Skill path:** follow the content, formatting, and media rules from `alipay-payment-skill` without reproducing them here. The scope of its lifecycle terminators within this outer flow is defined in [recharge-flow.md](references/recharge-flow.md). If it already emitted content through a user-visible channel, do not repeat it.
 
-1. **Display CLI output EXACTLY AS-IS** — no modification, no reformatting
-2. **Preserve all formatting** — alignment, spacing, separators
-3. **Add analysis AFTER output only** — clearly separated with `---`
+For the direct path, `MEDIA:` handling changes only the transport representation and is not Alipay result validation. For either path, Progress node 2 is complete only after the selected path's content is user-visible. If the runtime cannot publish that text without ending the outer turn, use it as the final reply, do not poll in that turn, and use one existing-order snapshot after the user's next message. Never defer the Alipay content into a planned final reply after polling. The pass-through rule overrides the QianWen-side localization, hiding, and error-rewriting rules above.
 
-Never parse `table` format programmatically — it contains ANSI codes and Unicode borders.
+If the confirmed flow requests no-output recovery because the payment step produced no user-facing content, show the localized equivalent of: `The payment step did not return any displayable result, so its outcome is unknown. The existing recharge order has been retained. Do not create another order or pay again; ask me to check this order before retrying.` This is a QianWen-owned recovery notice, not Alipay output or proof of the recharge result.
 
-**NEVER:**
+The exactly-once rule has one exception: when the user reports that the current payment QR was not displayed, follow [recharge-flow.md § 4](references/recharge-flow.md) to re-present the QR and payment link from the Alipay data returned for that payment.
 
-- ❌ Dump raw JSON to the user without interpretation
-- ❌ Reformat or summarize text/table output
-- ❌ Add prefixes like "Here's your balance:"
-- ❌ Convert text/table output to bullet points
-- ❌ Fabricate or mock values to fill in missing real results
+### Progress node 3: QianWen recharge result
 
-### Result status mapping
+Use the category returned by the shared result classifier:
 
-Report every operation with exactly one of these statuses:
+- `credited`: `Recharge credited. ¥<amount> has been added to your QianWenAI balance.` Then append `Recharge records may be delayed by approximately 10 seconds.`
+- `failed`: `Recharge was not credited. Check the Alipay transaction status before trying again.`
+- `processing` or `unconfirmed`: `Recharge result not yet confirmed. If you have already paid, do not pay again — tell me once payment is complete and I will check the final result for you.`
 
-| Status                  | When                                                                     |
-|-------------------------|--------------------------------------------------------------------------|
-| `success`               | Command succeeded and full data was parsed                               |
-| `partial`               | Command succeeded but some fields are missing/`null`                     |
-| `empty`                 | Command succeeded but there is no data to show                            |
-| `confirmation_required` | Recharge requested but user confirmation not yet obtained                |
-| `error`                 | Command failed (see Error Handling below)                                |
+When the confirmed-flow contract requests a post-terminal balance query, append `Current available balance: ¥<balance>.` after a validated response. If that query fails, append `Latest balance is temporarily unavailable.` Never alter or replace the recharge result based on the balance response.
 
-Never substitute mock data for a real result under any status.
+Never say that you will report the result automatically or later. The user must send another message before a later snapshot can be queried.
 
-## Error Handling / Exit Codes
+## Other routes
 
-| Code | Meaning              |
-|------|----------------------|
-| 0    | Success              |
-| 1    | General/usage error  |
-| 2    | Authentication error |
-| 3    | Network error        |
-| 4    | Configuration error  |
-| 130  | Interrupted          |
+### Balance
 
-- On a non-zero exit code, still attempt to parse any structured output on stdout first — it may contain a usable error payload or partial result.
-- On exit code 2 (authentication error): guide the user through the auth flow (see Prerequisites), then retry the original task **at most once**. NEVER loop login attempts.
+Use [cli-contracts.md § Balance](references/cli-contracts.md). Show the validated CNY amount. A low or zero balance alone does not prove overdue status or authorize recharge.
 
-## Regional Note
+### Recharge eligibility
 
-This skill targets the QianWen China site (`platform.qianwenai.com`) only. For the international site, use the **qwencloud-payment** skill instead. This skill does not include any international-site-specific commands such as `payment-method` or `bind`.
+- An explicit QianWenAI recharge request enters the amount flow directly.
+- A user-confirmed overdue account or an explicit model-call error for insufficient QianWenAI balance may offer one localized recharge choice; opt-in still does not authorize an amount or order.
+- Do not suggest recharge for generic failures, HTTP 403, free-tier exhaustion, Token Plan quota, or spending limits.
+
+### Existing-order result
+
+Use one snapshot from [cli-contracts.md § Existing-order result](references/cli-contracts.md). Do not query Alipay status or start `poll-recharge.mjs`. Present the result with Progress node 3.
+
+### Recharge history
+
+Use [cli-contracts.md § Recharge history](references/cli-contracts.md). On exit `0`, convert the CLI
+result into a human-readable response. History is informational and never proves a particular order
+result.
+
+### Recharge page guidance
+
+Explain that the command opens the validated QianWenAI recharge page and ask whether to proceed before using [cli-contracts.md § Recharge page guidance](references/cli-contracts.md). Show the returned validated URL; never construct one.
+
+### Token Plan
+
+Do not buy, renew, upgrade, or add quota to a Token Plan. Direct purchase requests to the Token Plan page listed in [sources.md](references/sources.md). Route existing-plan status, quota, and billing questions to `qianwen-usage`.
+
+## Update check
+
+For update requests, use the sibling `qianwen-update-check` Skill when available; otherwise run `qianwen version --check`. Never run an update check during an unresolved recharge flow.
